@@ -493,8 +493,8 @@ def export_xlsx(paths: list[Path]) -> Result:
 def _cell_value(v):
     if v is None:
         return None
-    s = str(v).replace("\n", " ").strip()
-    t = s.replace(" ", "").replace("\u00a0", "").replace(",", ".")
+    s = str(v).replace("\n", " ").replace("\u00ad", "-").replace("\u00a0", " ").strip()
+    t = s.replace(" ", "").replace(",", ".")
     if re.fullmatch(r"-?\d+(\.\d+)?", t) and len(t) < 16 and not (len(t) > 1 and t[0] == "0" and t[1] != "."):
         return float(t) if "." in t else int(t)
     return s

@@ -22,6 +22,11 @@ import license as L
 L._reg_read = lambda: (None, False)   # тест полагается только на файлы, без реестра Windows
 L._reg_write = lambda t: None
 
+def _unhide(p):   # на Windows скрытый файл нельзя открыть на запись, снимаем атрибут
+    if os.name == "nt" and p.exists():
+        import ctypes
+        ctypes.windll.kernel32.SetFileAttributesW(str(p), 0x80)   # FILE_ATTRIBUTE_NORMAL
+
 k = Ed25519PrivateKey.generate()
 PRIV = k.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())
 L.PUBLIC_KEY_B64 = base64.b64encode(k.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode()
@@ -74,11 +79,12 @@ check("после подделки пробный период не оживае
 import json
 reset(); day(10); L.trial_days_left()          # install=10 окт в обоих файлах
 for f in (L._settings_path(), L._shadow_path()):   # пользователь правит дату «установки» на будущее
+    _unhide(f)
     raw = json.loads(f.read_text("utf-8")); raw["d"]["install"] = "2026-10-30"; f.write_text(json.dumps(raw), "utf-8")
 check("правка даты установки в файле замечена (подпись не сходится)", L.tampered())
 check("добавление лишних пробелов НЕ ломает честную запись", True)  # канонизация устойчива к форматированию
 reset(); day(10); L.trial_days_left()
-f = L._settings_path(); f.write_text(" \n" + f.read_text("utf-8") + "\n ", "utf-8")  # только форматирование
+f = L._settings_path(); _unhide(f); f.write_text(" \n" + f.read_text("utf-8") + "\n ", "utf-8")  # только форматирование
 check("переформатирование файла не считается подделкой", not L.tampered())
 
 # ── 4. удаление настроек не сбрасывает пробный период ──

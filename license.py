@@ -283,14 +283,21 @@ def _persist(rec: dict) -> None:
     except OSError:
         pass
     _reg_write(text)
+    # теневой файл помечается «скрытым»; перезаписать скрытый файл обычным open('w') Windows не даёт,
+    # поэтому пишем во временный и подменяем через os.replace (он работает и со скрытым файлом).
     try:
         p = _shadow_path()
-        p.write_text(text, "utf-8")
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_text(text, "utf-8")
+        os.replace(tmp, p)
         if os.name == "nt":
             import ctypes
             ctypes.windll.kernel32.SetFileAttributesW(str(p), 0x2)   # FILE_ATTRIBUTE_HIDDEN
     except OSError:
-        pass
+        try:
+            tmp.unlink()
+        except Exception:
+            pass
 
 
 def _state() -> dict:
