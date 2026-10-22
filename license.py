@@ -20,15 +20,37 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 
+# ── секреты сборки ──────────────────────────────────────────────────────────────────
+# Режим сборки и «перец» HMAC берутся из _secret.py, который создаётся ПРИ СБОРКЕ из GitHub-
+# секретов и НЕ хранится в репозитории (см. .gitignore). В разработке и тестах — из переменных
+# окружения или безопасных значений по умолчанию. Так настоящий перец не виден в исходном коде,
+# и прочитать его «через GPT», открыв репозиторий, нельзя.
+try:
+    import _secret as _S            # создаётся CI: FREE="0", PEPPER="…"
+except Exception:
+    _S = None
+
+
+def _cfg(env_name: str, secret_name: str, default: str) -> str:
+    v = os.environ.get(env_name)
+    if v is not None:
+        return v
+    if _S is not None and hasattr(_S, secret_name):
+        return str(getattr(_S, secret_name))
+    return default
+
+
 # ── режим сборки ────────────────────────────────────────────────────────────────────
 # True  — бесплатная полная версия: ВСЕ функции открыты, нет пробного периода, ключей и блокировок.
 # False — платная версия: после пробного периода PDF-функции требуют ключ (см. SALES.md).
-# Переключается одной строкой (или переменной окружения MANDARIN_FREE=0 для платной сборки).
-FREE_BUILD = os.environ.get("MANDARIN_FREE", "1") != "0"
+FREE_BUILD = _cfg("MANDARIN_FREE", "FREE", "1") != "0"
 
 # ── настройки продавца (нужны только для платной версии) ─────────────────────────────
 # Открытый ключ продавца (base64, 32 байта). Замените своим: python tools/keygen.py init
-PUBLIC_KEY_B64 = "REPLACE_WITH_YOUR_PUBLIC_KEY"
+PUBLIC_KEY_B64 = "FXHBQH0glw9tzfQjxHus7N0LVibzpP/uWb436+UFYVA="
+# Открытый ключ проверки целостности сборки (файл-страж Mandarin.exe.sig). Закрытая часть —
+# только в GitHub-секрете MANDARIN_BUILD_KEY, которым CI подписывает .exe при сборке.
+BUILD_PUBKEY_B64 = "ZiLOKlS42QPoz+A9aMM0d2KFjVJFCSG3iTFQBXbUF7A="
 BUY_URL = "https://mandarin-app.ru/#buy"         # страница покупки
 SUPPORT_EMAIL = "support@mandarin-app.ru"
 TRIAL_DAYS = 14
@@ -147,7 +169,7 @@ def verify_key(text: str, public_key_b64: str | None = None) -> License:
 # разобрав её, сможет подделать запись. Задача — не «сделать невзламываемо» (так не бывает), а
 # закрыть простые способы, которыми пробный период продлевают обычные пользователи.
 
-_PEPPER = b"mandarin.trial.v1.V3rkiau8"     # смените при желании; привязывает подпись к этой сборке
+_PEPPER = _cfg("MANDARIN_PEPPER", "PEPPER", "mandarin.dev.unsigned").encode()   # настоящий перец вшивается при сборке из секрета
 _TOLERANCE = 2                               # дней: запас на часовые пояса и сбитые часы
 
 
@@ -354,9 +376,43 @@ def is_pro() -> bool:
     return current() is not None
 
 
+def _compiled_exe() -> Path | None:
+    """Путь к запущенному скомпилированному .exe (PyInstaller/Nuitka), либо None в режиме разработки."""
+    import sys
+    if getattr(sys, "frozen", False) or "__compiled__" in globals():
+        return Path(sys.executable)
+    return None
+
+
+def integrity_ok() -> bool:
+    """Файл-страж: рядом с .exe лежит подпись Mandarin.exe.sig, сделанная ключом сборки. Если .exe
+    пропатчили — подпись не сойдётся. Политика безопасная для честных пользователей: при отсутствии
+    файла, ошибке чтения или в режиме разработки возвращаем True (не мешаем); блокируем ТОЛЬКО при
+    явном несовпадении подписи. Купленный ключ при этом всё равно работает (см. pro_enabled)."""
+    exe = _compiled_exe()
+    if exe is None or BUILD_PUBKEY_B64.startswith("REPLACE"):
+        return True
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        sig = exe.with_name(exe.name + ".sig").read_bytes()
+        Ed25519PublicKey.from_public_bytes(base64.b64decode(BUILD_PUBKEY_B64)).verify(sig, exe.read_bytes())
+        return True
+    except InvalidSignature:
+        return False
+    except Exception:
+        return True
+
+
 def pro_enabled() -> bool:
     """Pro-функции доступны: бесплатная сборка, действующий ключ или честный пробный период."""
-    return FREE_BUILD or is_pro() or trial_days_left() > 0
+    if FREE_BUILD:
+        return True
+    if is_pro():                 # купленный ключ (Ed25519) работает всегда, независимо от защиты
+        return True
+    if not integrity_ok():       # .exe пропатчен → бесплатный Pro по пробному периоду не выдаём
+        return False
+    return trial_days_left() > 0
 
 
 def needs_pro(action) -> bool:

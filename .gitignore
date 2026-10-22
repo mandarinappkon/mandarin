@@ -6,3 +6,6 @@ dist/
 __pycache__/
 *.spec
 server/.env
+
+# секреты сборки (создаётся CI из GitHub-секретов)
+_secret.py

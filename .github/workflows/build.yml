@@ -1,8 +1,8 @@
-# Сборка готового .exe на облачной Windows-машине — свой компьютер не нужен.
-# Как запустить: загрузите проект в репозиторий GitHub → вкладка Actions → "Build Windows" →
-# Run workflow. Через 10–15 минут в разделе Artifacts появятся:
-#   • Mandarin-Setup  — установщик Mandarin-Setup.exe (двойной клик → установка → запуск)
-#   • Mandarin-portable — папка-архив: распакуйте и запустите Mandarin.exe без установки
+# Платная защищённая сборка Mandarin на облачной Windows-машине.
+# Перед первым запуском добавьте секреты репозитория (Settings → Secrets and variables → Actions):
+#   MANDARIN_PEPPER     — «перец» HMAC защиты пробного периода
+#   MANDARIN_BUILD_KEY  — закрытый ключ подписи сборки (файл-страж .exe)
+# Сборка компилируется Nuitka (машинный код) и подписывается — рядом кладётся Mandarin.exe.sig.
 name: Build Windows
 
 on:
@@ -16,7 +16,7 @@ jobs:
     permissions:
       contents: write
     env:
-      PYTHONUTF8: "1"          # вывод и работа с файлами в UTF-8 (иначе кириллица роняет print на Windows)
+      PYTHONUTF8: "1"
       PYTHONIOENCODING: "utf-8"
     steps:
       - uses: actions/checkout@v4
@@ -27,14 +27,14 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller qrcode python-docx
+          pip install -r requirements.txt nuitka qrcode python-docx
 
       - name: Run tests
         shell: bash
         run: |
           set +e
           fail=0
-          for t in engine pdftools license antitamper sales; do
+          for t in engine pdftools license antitamper integrity sales; do
             echo "========== test_$t ==========" | tee -a tests.log
             python -X utf8 tests/test_$t.py >> tests.log 2>&1
             code=$?
@@ -61,49 +61,60 @@ jobs:
           git commit -m "CI: лог упавших тестов [skip ci]" || exit 0
           git push origin HEAD:main
 
-      - name: Build app (бесплатная полная версия)
-        env:
-          MANDARIN_FREE: "1"
-        run: >
-          pyinstaller --noconfirm --clean --windowed --name Mandarin --icon mandarin.ico
-          --add-data "mandarin.ico;." --add-data "tessdata;tessdata"
-          --collect-all tkinterdnd2 --collect-all imageio_ffmpeg
-          --collect-all pillow_heif --collect-all pymupdf
-          --collect-all pdf2docx --collect-all docx --collect-all pptx --collect-all openpyxl
-          --collect-all pyhanko --collect-all pyhanko_certvalidator
-          --hidden-import pystray._win32 app.py
-
-      - name: Add uninstaller to portable build
-        run: copy uninstall.bat, uninstall.ps1 dist/Mandarin/
-
-      - name: Build installer (Setup.exe)
+      # Секреты сборки: режим «платная» + настоящий перец. Файл _secret.py в репозиторий не попадает.
+      - name: Inject build secrets
+        shell: bash
         run: |
-          choco install innosetup --no-progress -y
-          & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" installer.iss
+          if [ -z "${{ secrets.MANDARIN_PEPPER }}" ] || [ -z "${{ secrets.MANDARIN_BUILD_KEY }}" ]; then
+            echo "Добавьте секреты MANDARIN_PEPPER и MANDARIN_BUILD_KEY (Settings → Secrets and variables → Actions)"
+            exit 1
+          fi
+          printf 'FREE = "0"\nPEPPER = "%s"\n' "${{ secrets.MANDARIN_PEPPER }}" > _secret.py
 
-      - name: Upload installer
+      - name: Build app (Nuitka, платная версия)
+        run: >
+          python -m nuitka --onefile --assume-yes-for-downloads
+          --windows-console-mode=disable --enable-plugin=tk-inter
+          --windows-icon-from-ico=mandarin.ico
+          --include-data-file=mandarin.ico=mandarin.ico
+          --include-data-dir=tessdata=tessdata
+          --include-module=_secret
+          --include-package=tkinterdnd2 --include-package-data=tkinterdnd2
+          --include-package=pymupdf --include-package=pdf2docx
+          --include-package=docx --include-package=pptx --include-package=openpyxl
+          --include-package=pyhanko --include-package=pyhanko_certvalidator
+          --include-package=imageio_ffmpeg --include-package-data=imageio_ffmpeg
+          --include-package=pillow_heif --include-package-data=pillow_heif
+          --output-filename=Mandarin.exe --output-dir=dist app.py
+
+      # Подпись сборки: рядом с .exe появляется Mandarin.exe.sig (файл-страж целостности)
+      - name: Sign build
+        shell: bash
+        env:
+          MANDARIN_BUILD_KEY: ${{ secrets.MANDARIN_BUILD_KEY }}
+        run: python tools/sign_build.py dist/Mandarin.exe
+
+      - name: Package portable zip
+        shell: bash
+        run: |
+          powershell -NoProfile -Command "Compress-Archive -Path dist/Mandarin.exe,dist/Mandarin.exe.sig,uninstall.bat,uninstall.ps1 -DestinationPath Mandarin-portable.zip -Force"
+
+      - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: Mandarin-Setup
-          path: dist-installer/Mandarin-Setup.exe
+          name: Mandarin
+          path: |
+            dist/Mandarin.exe
+            dist/Mandarin.exe.sig
 
-      - name: Upload portable build
-        uses: actions/upload-artifact@v4
-        with:
-          name: Mandarin-portable
-          path: dist/Mandarin
-
-      # Готовые файлы выкладываем в Releases — оттуда их можно скачать по прямой ссылке
       - name: Publish release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          powershell -NoProfile -Command "Compress-Archive -Path dist/Mandarin/* -DestinationPath Mandarin-portable.zip -Force"
           tag="build-$(date -u +%Y%m%d-%H%M)"
           gh release create "$tag" \
-            dist-installer/Mandarin-Setup.exe \
-            Mandarin-portable.zip \
-            --title "Mandarin — бесплатная версия ($tag)" \
-            --notes "Готовая сборка Windows. **Mandarin-Setup.exe** — установщик (двойной клик). **Mandarin-portable.zip** — без установки, распакуйте и запустите Mandarin.exe." \
+            dist/Mandarin.exe dist/Mandarin.exe.sig Mandarin-portable.zip \
+            --title "Mandarin Pro ($tag)" \
+            --notes "Платная защищённая сборка. 14 дней бесплатно, затем PDF-Pro требует ключ. **Важно:** держите Mandarin.exe и Mandarin.exe.sig в одной папке — подпись защищает программу от взлома. Mandarin-portable.zip — то же в архиве с деинсталлятором." \
             --latest
