@@ -13,6 +13,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
     env:
       PYTHONUTF8: "1"          # вывод и работа с файлами в UTF-8 (иначе кириллица роняет print на Windows)
       PYTHONIOENCODING: "utf-8"
@@ -48,6 +50,16 @@ jobs:
         with:
           name: test-log
           path: tests.log
+      - name: Publish test log into repo on failure
+        if: failure()
+        shell: bash
+        run: |
+          git config user.email "ci@mandarin.local"
+          git config user.name "mandarin-ci"
+          mkdir -p ci-logs && cp tests.log ci-logs/last-failure.txt
+          git add ci-logs/last-failure.txt
+          git commit -m "CI: лог упавших тестов [skip ci]" || exit 0
+          git push origin HEAD:main
 
       - name: Build app (бесплатная полная версия)
         env:
