@@ -92,3 +92,18 @@ jobs:
         with:
           name: Mandarin-portable
           path: dist/Mandarin
+
+      # Готовые файлы выкладываем в Releases — оттуда их можно скачать по прямой ссылке
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          powershell -NoProfile -Command "Compress-Archive -Path dist/Mandarin/* -DestinationPath Mandarin-portable.zip -Force"
+          tag="build-$(date -u +%Y%m%d-%H%M)"
+          gh release create "$tag" \
+            dist-installer/Mandarin-Setup.exe \
+            Mandarin-portable.zip \
+            --title "Mandarin — бесплатная версия ($tag)" \
+            --notes "Готовая сборка Windows. **Mandarin-Setup.exe** — установщик (двойной клик). **Mandarin-portable.zip** — без установки, распакуйте и запустите Mandarin.exe." \
+            --latest
