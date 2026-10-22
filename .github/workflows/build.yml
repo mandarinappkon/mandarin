@@ -13,6 +13,9 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"          # вывод и работа с файлами в UTF-8 (иначе кириллица роняет print на Windows)
+      PYTHONIOENCODING: "utf-8"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,16 +27,27 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller qrcode python-docx
 
-      - name: Test — engine
-        run: python tests/test_engine.py
-      - name: Test — pdftools
-        run: python tests/test_pdftools.py
-      - name: Test — license
-        run: python tests/test_license.py
-      - name: Test — antitamper
-        run: python tests/test_antitamper.py
-      - name: Test — sales
-        run: python tests/test_sales.py
+      - name: Run tests
+        shell: bash
+        run: |
+          set +e
+          fail=0
+          for t in engine pdftools license antitamper sales; do
+            echo "========== test_$t ==========" | tee -a tests.log
+            python -X utf8 tests/test_$t.py >> tests.log 2>&1
+            code=$?
+            echo "exit=$code" | tee -a tests.log
+            [ $code -ne 0 ] && fail=1
+          done
+          echo "---- последние строки ----"
+          tail -c 6000 tests.log
+          exit $fail
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log
+          path: tests.log
 
       - name: Build app (бесплатная полная версия)
         env:
