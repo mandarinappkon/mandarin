@@ -1,8 +1,8 @@
 """
-Сквозная проверка продажи в браузере (Playwright + имитация ЮKassa):
+Сквозная проверка продажи в браузере (Playwright + имитация Робокассы):
     python tests/test_site_e2e.py [папка_для_скриншотов]
 """
-import base64, json, os, re, shutil, sys, tempfile, threading, uuid, urllib.parse
+import base64, hashlib, json, os, re, shutil, sys, tempfile, threading, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer, SimpleHTTPRequestHandler
 from functools import partial
 from pathlib import Path
@@ -15,52 +15,77 @@ SHOTS = Path(sys.argv[1]) if len(sys.argv) > 1 else None
 
 k = Ed25519PrivateKey.generate()
 L.PUBLIC_KEY_B64 = base64.b64encode(k.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode()
-PAY = {}
+LOGIN, PW1, PW2 = "mandarin", "p-one", "p-two"
+STATE = {}        # InvId → (код состояния, сумма)
+CFG = {}          # заполним адресами серверов после старта
+
+
+def rk_sig(*parts):
+    return hashlib.sha256(":".join(str(p) for p in parts).encode()).hexdigest()
+
 
 def start(handler_cls):
-    s = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls); threading.Thread(target=s.serve_forever, daemon=True).start(); return s
+    s = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
+    threading.Thread(target=s.serve_forever, daemon=True).start(); return s
 
-class YK(BaseHTTPRequestHandler):          # API + страница оплаты ЮKassa
+
+class RK(BaseHTTPRequestHandler):          # имитация Робокассы: страница оплаты + OpStateExt
     def log_message(self, *a): pass
-    def _j(self, o, c=200):
-        d = json.dumps(o).encode(); self.send_response(c); self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(d))); self.end_headers(); self.wfile.write(d)
-    def do_POST(self):
-        b = json.loads(self.rfile.read(int(self.headers["Content-Length"]))); pid = str(uuid.uuid4())
-        PAY[pid] = {"id": pid, "status": "pending", "paid": False, "amount": b["amount"], "metadata": b["metadata"],
-                    "return_url": b["confirmation"]["return_url"],
-                    "confirmation": {"type": "redirect", "confirmation_url": f"http://127.0.0.1:{yk.server_port}/checkout/{pid}"}}
-        self._j(PAY[pid])
+
     def do_GET(self):
-        if self.path.startswith("/checkout/"):               # «покупатель оплатил» → уведомление → возврат на сайт
-            pid = self.path.rsplit("/", 1)[1]; PAY[pid].update(status="succeeded", paid=True)
-            import sales
-            sales.dispatch("POST", {"a": "webhook"}, json.dumps({"event": "payment.succeeded", "object": {"id": pid}}), "185.71.76.1", None)
-            self.send_response(302); self.send_header("Location", PAY[pid]["return_url"]); self.end_headers(); return
-        pid = self.path.rsplit("/", 1)[-1]; self._j(PAY.get(pid, {}), 200 if pid in PAY else 404)
+        u = urllib.parse.urlsplit(self.path); q = dict(urllib.parse.parse_qsl(u.query))
+        if u.path.endswith("/OpStateExt"):
+            inv = q.get("InvoiceID", "")
+            assert q.get("Signature", "").lower() == rk_sig(LOGIN, inv, PW2)
+            code, out = STATE.get(inv, (5, 0.0))
+            xml = ('<?xml version="1.0" encoding="utf-8"?>'
+                   '<OperationStateResponse xmlns="http://auth.robokassa.ru/Merchant/WebService/Service">'
+                   '<Result><Code>0</Code></Result>'
+                   f'<State><Code>{code}</Code></State>'
+                   f'<Info><OutSum>{out}</OutSum></Info></OperationStateResponse>').encode()
+            self.send_response(200); self.send_header("Content-Type", "text/xml")
+            self.send_header("Content-Length", str(len(xml))); self.end_headers(); self.wfile.write(xml); return
+        # страница оплаты: «покупатель оплатил» → ResultURL → возврат на Success URL
+        out, inv, sealed = q.get("OutSum", ""), q.get("InvId", ""), q.get("Shp_d", "")
+        STATE[inv] = (100, float(out))
+        import sales
+        cb = {"a": "webhook", "OutSum": out, "InvId": inv, "Shp_d": sealed,
+              "SignatureValue": rk_sig(f"{out}:{inv}:{PW2}:Shp_d={sealed}")}
+        sales.dispatch("POST", cb, "", "", None)
+        sp = urllib.parse.urlencode({"OutSum": out, "InvId": inv, "Shp_d": sealed,
+                                     "SignatureValue": rk_sig(f"{out}:{inv}:{PW1}:Shp_d={sealed}")})
+        self.send_response(302); self.send_header("Location", f"{CFG['site']}/success.html?{sp}")
+        self.end_headers()
+
 
 class API(BaseHTTPRequestHandler):         # функция продаж (как в облаке)
     def log_message(self, *a): pass
     def _go(self):
         import sales
         u = urllib.parse.urlsplit(self.path); n = int(self.headers.get("Content-Length") or 0)
-        st, hd, out = sales.dispatch(self.command, dict(urllib.parse.parse_qsl(u.query)), self.rfile.read(n).decode() if n else "",
-                                     "1.2.3.4", self.headers.get("Origin"))
+        st, hd, out = sales.dispatch(self.command, dict(urllib.parse.parse_qsl(u.query)),
+                                     self.rfile.read(n).decode() if n else "",
+                                     self.headers.get("Content-Type", ""), self.headers.get("Origin"))
         self.send_response(st); [self.send_header(a, b) for a, b in hd.items()]; d = out.encode()
         self.send_header("Content-Length", str(len(d))); self.end_headers(); self.wfile.write(d)
     do_GET = do_POST = do_OPTIONS = _go
 
-yk = start(YK); api = start(API)
+
+rk = start(RK); api = start(API)
 site_dir = Path(tempfile.mkdtemp()); shutil.copytree(ROOT / "site", site_dir, dirs_exist_ok=True)
 site = start(partial(SimpleHTTPRequestHandler, directory=str(site_dir)))
 SITE = f"http://127.0.0.1:{site.server_port}"; API_URL = f"http://127.0.0.1:{api.server_port}/"
+CFG["site"] = SITE
 for f in ("index.html", "success.html"):                  # подставляем адрес сервера, как сделает продавец
     p = site_dir / f; s = p.read_text("utf-8"); p.write_text(re.sub(r'API_URL: ""', f'API_URL: "{API_URL}"', s, count=1), "utf-8")
-os.environ.update({"YOOKASSA_API": f"http://127.0.0.1:{yk.server_port}/v3", "YOOKASSA_SHOP_ID": "1", "YOOKASSA_SECRET_KEY": "s",
+os.environ.update({
+    "ROBOKASSA_URL": f"http://127.0.0.1:{rk.server_port}/Merchant/Index.aspx",
+    "ROBOKASSA_OPSTATE": f"http://127.0.0.1:{rk.server_port}/Merchant/WebService/Service.asmx/OpStateExt",
+    "ROBOKASSA_LOGIN": LOGIN, "ROBOKASSA_PASSWORD1": PW1, "ROBOKASSA_PASSWORD2": PW2, "ROBOKASSA_HASH": "sha256",
     "PRICE_PRO": "990", "SITE_URL": SITE, "ALLOWED_ORIGINS": SITE, "MAIL_FROM": "s@m.ru", "SMTP_HOST": "x", "SMTP_PASSWORD": "x",
-    "CHECK_WEBHOOK_IP": "1", "MANDARIN_PRIVATE_KEY": base64.b64encode(k.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())).decode()})
+    "MANDARIN_PRIVATE_KEY": base64.b64encode(k.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())).decode()})
 import sales
-MAIL = []; sales.send_key_email = lambda e, key, ed, pid: MAIL.append((e, key))
+MAIL = []; sales.send_key_email = lambda e, key, ed, oid: MAIL.append((e, key))
 
 from playwright.sync_api import sync_playwright
 ok = 0
@@ -97,7 +122,7 @@ with sync_playwright() as p:
     check("после оплаты ключ на экране", key.startswith("MNDR-"), pg.inner_text("#state"))
     check("тот же ключ ушёл на почту", MAIL and MAIL[-1] == ("Anna.Petrova@mail.ru", key))
     check("ключ активируется в программе", L.verify_key(key).email_tag == L.email_tag("anna.petrova@mail.ru").hex())
-    check("цена списана серверная", list(PAY.values())[-1]["amount"]["value"] == "990.00")
+    check("почта не светится в адресе оплаты", "Anna.Petrova" not in json.dumps(list(STATE.keys())))
     # телефон
     m = b.new_page(viewport={"width": 390, "height": 844}, device_scale_factor=2)
     m.goto(SITE + "/index.html"); m.wait_for_timeout(500)

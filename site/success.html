@@ -62,12 +62,13 @@ const C = { API_URL: "", SUPPORT_EMAIL: "support@mandarin-app.ru", DOWNLOAD_URL:
   document.getElementById("support").textContent = C.SUPPORT_EMAIL;
   if (C.DOWNLOAD_URL) document.getElementById("dl").href = C.DOWNLOAD_URL;
   const $ = id => document.getElementById(id);
-  const token = new URLSearchParams(location.search).get("t");
-  let order = null;
-  try { order = JSON.parse(sessionStorage.getItem("mandarin_order") || "null"); } catch (_) {}
+  // Робокасса возвращает на эту страницу параметры оплаты (InvId, OutSum, SignatureValue, Shp_d) —
+  // просто пересылаем их серверу, он проверит подпись и статус платежа.
+  const rk = location.search.replace(/^\?/, "");
+  const hasOrder = /(^|&)InvId=/i.test(rk);
   const done = (text, cls) => { $("spin").hidden = true; $("state").textContent = text; $("state").className = cls || ""; };
   if (!C.API_URL) { done("Предпросмотр страницы: после настройки здесь появится ключ."); return; }
-  if (!order || !token || order.t !== token) {
+  if (!hasOrder) {
     done("Если оплата прошла, ключ уже на вашей почте.");
     return;
   }
@@ -75,7 +76,7 @@ const C = { API_URL: "", SUPPORT_EMAIL: "support@mandarin-app.ru", DOWNLOAD_URL:
   async function poll() {
     tries++;
     try {
-      const r = await fetch(`${C.API_URL}${C.API_URL.includes("?") ? "&" : "?"}a=order&id=${encodeURIComponent(order.id)}&t=${encodeURIComponent(token)}`);
+      const r = await fetch(`${C.API_URL}${C.API_URL.includes("?") ? "&" : "?"}a=order&${rk}`);
       const d = await r.json();
       if (d.status === "succeeded") {
         done("Оплата прошла", "ok");
