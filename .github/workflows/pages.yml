@@ -1,6 +1,6 @@
 # Бесплатная публикация сайта (папка site/) на GitHub Pages с HTTPS.
 # Включить один раз: репозиторий → Settings → Pages → Build and deployment → Source: "GitHub Actions".
-# Адрес сайта: https://gagatun201367-hash.github.io/mandarin/
+# Адрес сайта: https://mandarinappkon.github.io/mandarin/
 name: Deploy site to GitHub Pages
 
 on:
