@@ -1,0 +1,13 @@
+pillow>=10.0
+pillow-heif>=0.16
+pymupdf>=1.24
+pdf2docx>=0.5.8
+openpyxl>=3.1
+python-pptx>=0.6.23
+pyhanko>=0.25
+cryptography>=41
+imageio-ffmpeg>=0.5
+opencv-python-headless>=4.8
+tkinterdnd2>=0.4
+pystray>=0.19
+pywin32>=306; sys_platform == "win32"
