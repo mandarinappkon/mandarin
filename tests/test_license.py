@@ -3,10 +3,13 @@ import base64, datetime as dt, os, sys, tempfile
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ["APPDATA"] = tempfile.mkdtemp()
+os.environ["LOCALAPPDATA"] = tempfile.mkdtemp()
 os.environ["MANDARIN_FREE"] = "0"   # проверяем платный режим с блокировками
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 import license as L
+L._reg_read = lambda: (None, False)   # тест не трогает реестр Windows
+L._reg_write = lambda t: None
 
 k = Ed25519PrivateKey.generate()
 priv = k.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())

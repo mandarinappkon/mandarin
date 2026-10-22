@@ -24,13 +24,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller qrcode python-docx
 
-      - name: Run tests
-        run: |
-          python tests/test_engine.py
-          python tests/test_pdftools.py
-          python tests/test_license.py
-          python tests/test_antitamper.py
-          python tests/test_sales.py
+      - name: Test — engine
+        run: python tests/test_engine.py
+      - name: Test — pdftools
+        run: python tests/test_pdftools.py
+      - name: Test — license
+        run: python tests/test_license.py
+      - name: Test — antitamper
+        run: python tests/test_antitamper.py
+      - name: Test — sales
+        run: python tests/test_sales.py
 
       - name: Build app (бесплатная полная версия)
         env:

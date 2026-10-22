@@ -19,6 +19,8 @@ os.environ["LOCALAPPDATA"] = tempfile.mkdtemp()
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 import license as L
+L._reg_read = lambda: (None, False)   # тест полагается только на файлы, без реестра Windows
+L._reg_write = lambda t: None
 
 k = Ed25519PrivateKey.generate()
 PRIV = k.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())
