@@ -181,10 +181,10 @@ footer{border-top:1px solid var(--line);padding-block:32px 40px;color:var(--mute
 /* ═══ НАСТРОЙКИ САЙТА — замените перед запуском (см. SALES.md) ═══ */
 window.MANDARIN = {
   API_URL: "",                                   // адрес функции продаж, напр. https://functions.yandexcloud.net/d4e…
-  PRICE: 990,                                    // должна совпадать с PRICE_PRO на сервере
+  PRICE: 199,                                    // должна совпадать с PRICE_PRO на сервере
   DOWNLOAD_URL: "https://github.com/mandarinappkon/mandarin/releases/latest",
   SOURCE_URL: "https://github.com/mandarinappkon/mandarin",
-  SUPPORT_EMAIL: "gagatun201367@gmail.com",
+  SUPPORT_EMAIL: "Mandarinapp1@yandex.ru",
   SELLER: "Бойко Данил Дмитриевич, самозанятый (плательщик НПД), ИНН 745503652221"
 };
 </script>
@@ -214,7 +214,7 @@ window.MANDARIN = {
       <p class="lead">У курсора появляется колесо форматов. Отпускаете файл на нужной плитке — рядом с оригиналом появляется копия в новом формате. Плюс полноценный PDF-редактор: подпись, OCR, пароли, зачернение.</p>
       <div class="cta">
         <a class="btn btn-primary" data-href="DOWNLOAD_URL" href="#download">Скачать бесплатно</a>
-        <a class="btn btn-ghost" href="#price">Pro — <span data-price>990</span> ₽ навсегда</a>
+        <a class="btn btn-ghost" href="#price">Pro — <span data-price>199</span> ₽ навсегда</a>
       </div>
       <div class="meta"><span>14 дней Pro бесплатно</span><span>Файлы не покидают компьютер</span><span>Оплата картой и СБП</span></div>
     </div>
@@ -306,7 +306,7 @@ window.MANDARIN = {
         </div>
         <div class="plan best" id="buy">
           <div><h3>Mandarin Pro</h3><p style="color:var(--muted);margin-top:6px">Бессрочная лицензия для личного использования</p></div>
-          <div class="price"><span data-price>990</span> ₽<small>один платёж</small></div>
+          <div class="price"><span data-price>199</span> ₽<small>один платёж</small></div>
           <ul>
             <li>Всё из бесплатной версии</li>
             <li>PDF-редактор, подпись, штампы, формы</li>
@@ -317,7 +317,7 @@ window.MANDARIN = {
           <form class="buy" id="buy-form" novalidate>
             <div class="field"><label for="email">Почта — на неё придёт ключ</label><input id="email" name="email" type="email" autocomplete="email" placeholder="you@example.ru" required></div>
             <label class="agree" for="agree"><input id="agree" name="agree" type="checkbox" required><span>Принимаю условия <a href="oferta.html">оферты</a> и даю согласие на обработку почты по <a href="privacy.html">политике конфиденциальности</a></span></label>
-            <button class="btn btn-primary" type="submit" id="pay-btn">Оплатить <span data-price>990</span> ₽</button>
+            <button class="btn btn-primary" type="submit" id="pay-btn">Оплатить <span data-price>199</span> ₽</button>
             <div class="form-msg" id="form-msg" role="alert"></div>
             <div class="pay" aria-label="Способы оплаты"><span>Банковская карта</span><span>СБП</span><span>SberPay</span><span>T-Pay</span><span>ЮMoney</span></div>
           </form>
@@ -333,8 +333,8 @@ window.MANDARIN = {
         <details><summary>Как я получу ключ?</summary><p>Сразу после оплаты ключ появится на странице и придёт на почту. В программе: значок Mandarin в трее → «Лицензия…» → вставьте ключ → «Активировать». Интернет для активации не нужен.</p></details>
         <details><summary>На скольких компьютерах можно пользоваться?</summary><p>Лицензия личная: ставьте на свои компьютеры — домашний и рабочий. Для сотрудников компании нужна отдельная лицензия на каждого.</p></details>
         <details><summary>Что будет после пробного периода?</summary><p>Колесо форматов, конвертация, PDF в Word, сжатие и порядок страниц остаются бесплатными навсегда. Заблокируются только функции PDF Pro, пока вы не введёте ключ.</p></details>
-        <details><summary>Можно вернуть деньги?</summary><p>Да, в течение 14 дней после покупки, если ключ не подошёл или программа не работает на вашем компьютере. Напишите на <span data-text="SUPPORT_EMAIL">gagatun201367@gmail.com</span> с номером заказа из письма.</p></details>
-        <details><summary>Я потерял ключ</summary><p>Напишите на <span data-text="SUPPORT_EMAIL">gagatun201367@gmail.com</span> с почты, указанной при покупке, — пришлём ключ повторно.</p></details>
+        <details><summary>Можно вернуть деньги?</summary><p>Да, в течение 14 дней после покупки, если ключ не подошёл или программа не работает на вашем компьютере. Напишите на <span data-text="SUPPORT_EMAIL">Mandarinapp1@yandex.ru</span> с номером заказа из письма.</p></details>
+        <details><summary>Я потерял ключ</summary><p>Напишите на <span data-text="SUPPORT_EMAIL">Mandarinapp1@yandex.ru</span> с почты, указанной при покупке, — пришлём ключ повторно.</p></details>
         <details><summary>Какие нужны Windows и железо?</summary><p>Windows 10 или 11, 64-бит, до 500 МБ на диске. Для конвертации Word, Excel и PowerPoint в PDF нужен установленный Microsoft Office или бесплатный LibreOffice — PDF в Word работает без них.</p></details>
         <details><summary>Что внутри и где исходный код?</summary><p>Mandarin использует открытые компоненты (PyMuPDF, Tesseract, FFmpeg и другие) на условиях их лицензий. <a data-href="SOURCE_URL" href="#">Исходный код открыт</a>: покупая Pro, вы оплачиваете готовую сборку, обновления и поддержку.</p></details>
       </div>
@@ -355,7 +355,7 @@ window.MANDARIN = {
   <div class="wrap foot">
     <div><b>Mandarin</b><p class="req" data-text="SELLER">Бойко Данил Дмитриевич, самозанятый (плательщик НПД), ИНН 745503652221</p></div>
     <div><b>Документы</b><p class="req"><a href="oferta.html">Публичная оферта</a><br><a href="privacy.html">Политика конфиденциальности</a></p></div>
-    <div><b>Поддержка</b><p class="req"><span data-text="SUPPORT_EMAIL">gagatun201367@gmail.com</span><br>Отвечаем в течение рабочего дня</p></div>
+    <div><b>Поддержка</b><p class="req"><span data-text="SUPPORT_EMAIL">Mandarinapp1@yandex.ru</span><br>Отвечаем в течение рабочего дня</p></div>
   </div>
 </footer>
 
