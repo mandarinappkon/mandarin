@@ -73,7 +73,7 @@ jobs:
 
       - name: Build app (Nuitka, платная версия)
         run: >
-          python -m nuitka --onefile --assume-yes-for-downloads
+          python -m nuitka --onefile --assume-yes-for-downloads --mingw64 --lto=no
           --windows-console-mode=disable --enable-plugin=tk-inter
           --windows-icon-from-ico=mandarin.ico
           --include-data-file=mandarin.ico=mandarin.ico
