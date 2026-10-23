@@ -2,7 +2,7 @@
 # Перед первым запуском добавьте секреты репозитория (Settings → Secrets and variables → Actions):
 #   MANDARIN_PEPPER     — «перец» HMAC защиты пробного периода
 #   MANDARIN_BUILD_KEY  — закрытый ключ подписи сборки (файл-страж .exe)
-# Сборка компилируется Nuitka (машинный код) и подписывается — рядом кладётся Mandarin.exe.sig.
+# Сборка — один защищённый .exe (PyInstaller onefile), который подписывается: рядом Mandarin.exe.sig.
 name: Build Windows
 
 on:
@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt nuitka qrcode python-docx
+          pip install -r requirements.txt pyinstaller qrcode python-docx
 
       - name: Run tests
         shell: bash
@@ -71,21 +71,18 @@ jobs:
           fi
           printf 'FREE = "0"\nPEPPER = "%s"\n' "${{ secrets.MANDARIN_PEPPER }}" > _secret.py
 
-      - name: Build app (Nuitka, платная версия)
+      # PyInstaller onefile: один защищённый .exe. Nuitka не применим — PyMuPDF даёт C-файл на
+      # 2,3 млн строк, на котором и MSVC, и gcc исчерпывают память. Защиту даёт подпись .exe
+      # (файл-страж) + неподделываемые ключи Ed25519; платный режим — через вшитый _secret.py.
+      - name: Build app (PyInstaller, платная версия)
         run: >
-          python -m nuitka --onefile --assume-yes-for-downloads --mingw64 --lto=no
-          --windows-console-mode=disable --enable-plugin=tk-inter
-          --windows-icon-from-ico=mandarin.ico
-          --include-data-file=mandarin.ico=mandarin.ico
-          --include-data-dir=tessdata=tessdata
-          --include-module=_secret
-          --include-package=tkinterdnd2 --include-package-data=tkinterdnd2
-          --include-package=pymupdf --include-package=pdf2docx
-          --include-package=docx --include-package=pptx --include-package=openpyxl
-          --include-package=pyhanko --include-package=pyhanko_certvalidator
-          --include-package=imageio_ffmpeg --include-package-data=imageio_ffmpeg
-          --include-package=pillow_heif --include-package-data=pillow_heif
-          --output-filename=Mandarin.exe --output-dir=dist app.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name Mandarin --icon mandarin.ico
+          --add-data "mandarin.ico;." --add-data "tessdata;tessdata" --add-data "_secret.py;."
+          --hidden-import _secret --hidden-import pystray._win32
+          --collect-all tkinterdnd2 --collect-all imageio_ffmpeg --collect-all pillow_heif
+          --collect-all pymupdf --collect-all pdf2docx --collect-all docx --collect-all pptx
+          --collect-all openpyxl --collect-all pyhanko --collect-all pyhanko_certvalidator
+          app.py
 
       # Подпись сборки: рядом с .exe появляется Mandarin.exe.sig (файл-страж целостности)
       - name: Sign build
