@@ -9,3 +9,6 @@ server/.env
 
 # секреты сборки (создаётся CI из GitHub-секретов)
 _secret.py
+
+# собираемый артефакт функции оплаты
+server/function.zip
