@@ -102,6 +102,18 @@ nav a:hover{color:var(--ink)}
 .toast .fill{height:100%;width:0;background:var(--orange);border-radius:4px}
 .ghost{position:fixed;z-index:20;pointer-events:none;transform:translate(-50%,-50%) rotate(-4deg);opacity:.92}
 
+/* окно приложения вокруг демо: грунтует как настольную программу Windows */
+.demo.win{padding:0;overflow:hidden}
+.win-bar{display:flex;align-items:center;height:38px;padding:0 14px;background:var(--sunken);border-bottom:1px solid var(--line)}
+.win-bar .wt{font:600 13px var(--body);color:var(--muted)}
+.win-ctl{margin-left:auto;display:flex;gap:18px;color:var(--soft);font-size:12px;line-height:1}
+.demo-body{position:relative;padding:20px}
+/* синтетический курсор автопоказа и «летящий» файл */
+.cursor{position:absolute;left:0;top:0;width:19px;height:23px;z-index:16;pointer-events:none;opacity:0;transition:left .5s cubic-bezier(.45,.05,.2,1),top .5s cubic-bezier(.45,.05,.2,1),opacity .25s}
+.cursor svg{width:100%;height:100%;filter:drop-shadow(0 1.5px 1.5px rgba(0,0,0,.35))}
+.dragfile{position:absolute;left:0;top:0;z-index:15;pointer-events:none;opacity:0;transform:translate(-50%,-50%) rotate(-5deg);transition:left .5s cubic-bezier(.45,.05,.2,1),top .5s cubic-bezier(.45,.05,.2,1),opacity .25s;display:flex;align-items:center;gap:8px;border:1px solid var(--orange);background:var(--orange-soft);border-radius:10px;padding:7px 11px 7px 8px;font:500 13px var(--body);color:var(--ink);box-shadow:var(--shadow);white-space:nowrap}
+.dragfile i{width:22px;height:26px;border-radius:4px;display:grid;place-items:center;font:700 7px var(--body);font-style:normal;color:#fff}
+
 /* секции */
 section{padding-block:72px}
 .sec-head{display:grid;gap:14px;margin-bottom:36px;max-width:720px}
@@ -183,7 +195,6 @@ window.MANDARIN = {
   API_URL: "https://functions.yandexcloud.net/d4e3ggudi9a6lqn7ct12",                                   // адрес функции продаж, напр. https://functions.yandexcloud.net/d4e…
   PRICE: 199,                                    // должна совпадать с PRICE_PRO на сервере
   DOWNLOAD_URL: "https://github.com/mandarinappkon/mandarin/releases/latest",
-  SOURCE_URL: "https://github.com/mandarinappkon/mandarin",
   SUPPORT_EMAIL: "Mandarinapp1@yandex.ru",
   SELLER: "Бойко Данил Дмитриевич, самозанятый (плательщик НПД), ИНН 745503652221"
 };
@@ -209,7 +220,7 @@ window.MANDARIN = {
 <main id="top">
   <div class="wrap hero">
     <div>
-      <p class="eyebrow">Для Windows 10 и 11 · работает без интернета</p>
+      <p class="eyebrow">Конвертер и PDF-редактор для Windows</p>
       <h1 style="margin-top:14px">Перетащите файл, нажмите <span class="k">Shift</span> и отпустите.</h1>
       <p class="lead">У курсора появляется колесо форматов. Отпускаете файл на нужной плитке — рядом с оригиналом появляется копия в новом формате. Плюс полноценный PDF-редактор: подпись, OCR, пароли, зачернение.</p>
       <div class="cta">
@@ -219,22 +230,30 @@ window.MANDARIN = {
       <div class="meta"><span>14 дней Pro бесплатно</span><span>Файлы не покидают компьютер</span><span>Оплата картой и СБП</span></div>
     </div>
 
-    <div class="demo" aria-label="Попробуйте колесо Mandarin">
-      <div class="demo-top">
-        <div class="files" role="group" aria-label="Файл для примера">
-          <button class="file" data-file="pdf" aria-pressed="true"><i style="background:#d93a40">PDF</i>договор.pdf</button>
-          <button class="file" data-file="heic" aria-pressed="false"><i style="background:#4c8dff">HEIC</i>отпуск.heic</button>
-          <button class="file" data-file="mp4" aria-pressed="false"><i style="background:#7b4fd6">MP4</i>лекция.mp4</button>
-        </div>
-        <div class="keys" role="group" aria-label="Клавиша">
-          <button data-mode="convert" aria-pressed="true">Shift · форматы</button>
-          <button data-mode="tools" aria-pressed="false">Ctrl · инструменты</button>
-        </div>
+    <div class="demo win" aria-label="Как работает Mandarin: автопоказ и интерактив">
+      <div class="win-bar">
+        <span class="wt">Mandarin — рабочий стол</span>
+        <span class="win-ctl" aria-hidden="true"><span>&#8211;</span><span>&#9633;</span><span>&#10005;</span></span>
       </div>
-      <div class="stage">
-        <svg id="wheel" viewBox="0 0 280 280" role="img" aria-label="Колесо форматов"></svg>
-        <div class="caption" id="caption">Перетащите файл на плитку или нажмите на неё</div>
-        <div class="toast" id="toast" role="status" aria-live="polite"><b id="t-title">Конвертирую</b><small id="t-sub">договор.pdf</small><div class="track"><div class="fill" id="t-fill"></div></div></div>
+      <div class="demo-body">
+        <div class="demo-top">
+          <div class="files" role="group" aria-label="Файл для примера">
+            <button class="file" data-file="pdf" aria-pressed="true"><i style="background:#d93a40">PDF</i>договор.pdf</button>
+            <button class="file" data-file="heic" aria-pressed="false"><i style="background:#4c8dff">HEIC</i>отпуск.heic</button>
+            <button class="file" data-file="mp4" aria-pressed="false"><i style="background:#7b4fd6">MP4</i>лекция.mp4</button>
+          </div>
+          <div class="keys" role="group" aria-label="Клавиша">
+            <button data-mode="convert" aria-pressed="true">Shift · форматы</button>
+            <button data-mode="tools" aria-pressed="false">Ctrl · инструменты</button>
+          </div>
+        </div>
+        <div class="stage">
+          <svg id="wheel" viewBox="0 0 280 280" role="img" aria-label="Меню форматов"></svg>
+          <div class="caption" id="caption">Идёт показ — или перетащите файл сами</div>
+          <div class="toast" id="toast" role="status" aria-live="polite"><b id="t-title">Конвертирую</b><small id="t-sub">договор.pdf</small><div class="track"><div class="fill" id="t-fill"></div></div></div>
+        </div>
+        <div class="cursor" id="pc" aria-hidden="true"><svg viewBox="0 0 20 24" fill="none"><path d="M2 2l15 6-6 2-2 6z" fill="#fff" stroke="#141312" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
+        <div class="dragfile" id="pf" aria-hidden="true"></div>
       </div>
     </div>
   </div>
@@ -336,7 +355,7 @@ window.MANDARIN = {
         <details><summary>Можно вернуть деньги?</summary><p>Да, в течение 14 дней после покупки, если ключ не подошёл или программа не работает на вашем компьютере. Напишите на <span data-text="SUPPORT_EMAIL">Mandarinapp1@yandex.ru</span> с номером заказа из письма.</p></details>
         <details><summary>Я потерял ключ</summary><p>Напишите на <span data-text="SUPPORT_EMAIL">Mandarinapp1@yandex.ru</span> с почты, указанной при покупке, — пришлём ключ повторно.</p></details>
         <details><summary>Какие нужны Windows и железо?</summary><p>Windows 10 или 11, 64-бит, до 500 МБ на диске. Для конвертации Word, Excel и PowerPoint в PDF нужен установленный Microsoft Office или бесплатный LibreOffice — PDF в Word работает без них.</p></details>
-        <details><summary>Что внутри и где исходный код?</summary><p>Mandarin использует открытые компоненты (PyMuPDF, Tesseract, FFmpeg и другие) на условиях их лицензий. <a data-href="SOURCE_URL" href="#">Исходный код открыт</a>: покупая Pro, вы оплачиваете готовую сборку, обновления и поддержку.</p></details>
+        <details><summary>Это безопасно? Не увидит ли кто мои файлы?</summary><p>Нет. Mandarin работает полностью на вашем компьютере: файлы никуда не загружаются, интернет для работы не нужен — можно отключить его и проверить. Программа не собирает статистику и не показывает рекламу.</p></details>
       </div>
     </div>
   </section>
@@ -483,6 +502,36 @@ window.MANDARIN = {
   matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", draw);
   new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   draw();
+
+  /* ── автопоказ: синтетический курсор «снимает кино» процесса; первый реальный клик отдаёт управление ── */
+  (() => {
+    const demoBody = document.querySelector(".demo-body");
+    const pc = document.getElementById("pc"), pf = document.getElementById("pf");
+    if (!demoBody || !pc || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let auto = true;
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const rel = el => { const d = demoBody.getBoundingClientRect(), b = el.getBoundingClientRect(); return { x: b.left - d.left + b.width / 2, y: b.top - d.top + b.height / 2 }; };
+    const move = (x, y) => { pc.style.left = (x - 2) + "px"; pc.style.top = (y - 1) + "px"; };
+    async function playOne(f, target) {
+      if (!auto) return;
+      const card = document.querySelector(`.file[data-file="${f}"]`);
+      const p = rel(card);
+      move(p.x + 6, p.y + 5); pc.style.opacity = 1; await wait(650); if (!auto) return;
+      setFile(f);
+      pf.innerHTML = card.innerHTML; pf.style.left = p.x + "px"; pf.style.top = p.y + "px"; pf.style.opacity = 1; await wait(320); if (!auto) return;
+      const n = SETS[f][mode].length, step = 360 / n, ang = target * step * Math.PI / 180;
+      const wb = rel(svg), Rpx = svg.getBoundingClientRect().width / 280 * 90;
+      const tx = wb.x + Rpx * Math.sin(ang), ty = wb.y - Rpx * Math.cos(ang);
+      move(tx + 4, ty + 3); pf.style.left = tx + "px"; pf.style.top = ty + "px"; setHover(target); await wait(780); if (!auto) return;
+      pf.style.opacity = 0; run(target); await wait(3300);
+    }
+    (async () => {
+      const seq = [["pdf", 0], ["heic", 0], ["mp4", 4]];
+      for (let i = 0; auto; i++) { await playOne(...seq[i % seq.length]); if (auto) await wait(550); }
+      pc.style.opacity = 0; pf.style.opacity = 0;
+    })();
+    demoBody.addEventListener("pointerdown", e => { if (e.isTrusted) { auto = false; pc.style.opacity = 0; pf.style.opacity = 0; } }, true);
+  })();
 
   /* ── покупка ── */
   const form = document.getElementById("buy-form"), msg = document.getElementById("form-msg"), btn = document.getElementById("pay-btn");
