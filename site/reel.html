@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080, initial-scale=1">
+<title>Mandarin Reel</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#111013; --paper:#f4f2ec; --surface:#ffffff; --line:#e3dfd5; --sunken:#edeae2;
+  --muted:#6a6a72; --soft:#9a9a9f; --citrus:#ff5a0a; --citrus-soft:#fff0e6; --leaf:#1f8a5b;
+  --tile:#f4f3f0; --tile-edge:#e0ded6; --disc:#eceae4; --rim:#dddad2;
+  --d:"Unbounded","Segoe UI",system-ui,Arial,sans-serif;
+  --b:"Onest","Segoe UI",system-ui,Arial,sans-serif;
+}
+html,body{width:1080px;height:1920px;overflow:hidden}
+body{background:var(--ink);color:#fff;font-family:var(--b);position:relative}
+.stageBg{position:absolute;inset:0;background:
+  radial-gradient(120% 70% at 50% -10%, #241a12 0%, #141012 55%, #0d0b0d 100%)}
+.wrap{position:relative;height:100%;display:flex;flex-direction:column;align-items:center;padding:150px 80px 120px}
+
+/* бренд */
+.brand{display:flex;align-items:center;gap:18px;font:700 40px var(--d);letter-spacing:-.01em}
+.brand svg{width:56px;height:56px}
+
+/* крупная подпись */
+.cap{margin-top:70px;height:360px;display:flex;align-items:center;justify-content:center;text-align:center}
+.cap h1{font:800 76px/1.08 var(--d);letter-spacing:-.02em;max-width:900px;opacity:0;transform:translateY(22px);transition:opacity .45s,transform .45s}
+.cap h1.on{opacity:1;transform:none}
+.cap h1 em{font-style:normal;color:var(--citrus)}
+
+/* окно приложения */
+.win{width:900px;background:var(--surface);color:var(--ink);border-radius:26px;overflow:hidden;
+  box-shadow:0 40px 120px -30px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.04);position:relative;
+  opacity:0;transform:translateY(40px) scale(.98);transition:opacity .6s,transform .6s}
+.win.on{opacity:1;transform:none}
+.winbar{display:flex;align-items:center;height:62px;padding:0 26px;background:var(--sunken);border-bottom:1px solid var(--line)}
+.winbar .t{font:600 24px var(--b);color:var(--muted)}
+.winbar .c{margin-left:auto;display:flex;gap:26px;color:var(--soft);font-size:22px}
+.body{position:relative;padding:34px 34px 44px}
+.files{display:flex;gap:16px;justify-content:center}
+.file{display:flex;align-items:center;gap:14px;border:1.5px solid var(--line);background:var(--paper);border-radius:16px;padding:14px 20px 14px 14px;font:600 26px var(--b)}
+.file.sel{border-color:var(--citrus);background:var(--citrus-soft)}
+.file i{width:44px;height:52px;border-radius:8px;display:grid;place-items:center;font:800 15px var(--b);font-style:normal;color:#fff}
+.stage{position:relative;display:grid;place-items:center;margin-top:30px;min-height:600px}
+.stage svg#wheel{width:600px;height:600px;overflow:visible}
+.result{position:absolute;left:50%;bottom:20px;transform:translate(-50%,16px);width:620px;background:var(--surface);
+  border:1.5px solid var(--line);border-radius:20px;padding:22px 26px;display:flex;align-items:center;gap:18px;
+  box-shadow:0 24px 60px -20px rgba(0,0,0,.35);opacity:0;transition:.35s}
+.result.on{opacity:1;transform:translate(-50%,0)}
+.result .ok{width:52px;height:52px;border-radius:50%;background:var(--leaf);display:grid;place-items:center;flex:none}
+.result .ok svg{width:30px;height:30px}
+.result b{font:700 28px var(--b);display:block}
+.result small{font:500 22px var(--b);color:var(--muted)}
+.cursor{position:absolute;left:0;top:0;width:46px;height:56px;z-index:9;pointer-events:none;opacity:0;
+  transition:left .55s cubic-bezier(.45,.05,.2,1),top .55s cubic-bezier(.45,.05,.2,1),opacity .25s}
+.cursor svg{width:100%;height:100%;filter:drop-shadow(0 3px 4px rgba(0,0,0,.4))}
+.dragfile{position:absolute;left:0;top:0;z-index:8;pointer-events:none;opacity:0;transform:translate(-50%,-50%) rotate(-5deg);
+  transition:left .55s cubic-bezier(.45,.05,.2,1),top .55s cubic-bezier(.45,.05,.2,1),opacity .25s;
+  display:flex;align-items:center;gap:14px;border:1.5px solid var(--citrus);background:var(--citrus-soft);border-radius:16px;
+  padding:14px 20px 14px 14px;font:600 26px var(--b);color:var(--ink);box-shadow:0 20px 50px -16px rgba(0,0,0,.4);white-space:nowrap}
+.dragfile i{width:44px;height:52px;border-radius:8px;display:grid;place-items:center;font:800 15px var(--b);font-style:normal;color:#fff}
+
+/* нижняя плашка-CTA */
+.cta{position:absolute;left:80px;right:80px;top:48%;text-align:center;opacity:0;transform:translateY(16px);transition:opacity .6s,transform .6s}
+.cta.on{opacity:1;transform:none}
+.cta .price{font:800 120px/1 var(--d);color:#fff;letter-spacing:-.03em}
+.cta .price span{color:var(--citrus)}
+.cta .sub{font:600 34px var(--b);color:#d9d6cf;margin-top:10px}
+.cta .url{display:inline-block;margin-top:26px;font:700 32px var(--b);color:var(--ink);background:var(--citrus);
+  padding:18px 34px;border-radius:16px}
+
+.badges{position:absolute;bottom:150px;left:50%;transform:translateX(-50%);display:flex;gap:18px;opacity:0;transition:.5s}
+.badges.on{opacity:1}
+.badge{font:600 28px var(--b);color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);
+  padding:14px 24px;border-radius:999px;display:flex;align-items:center;gap:12px}
+.badge b{color:var(--citrus)}
+</style>
+</head>
+<body>
+<div class="stageBg"></div>
+<div class="wrap">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="18" r="12" fill="#ff5a0a"/><ellipse cx="11.5" cy="14.5" rx="3" ry="2.2" fill="#ffb27f"/><path d="M16.5 6.5c2-3.6 6.6-4.6 9.5-3.4-1.4 3.4-5.6 5.4-9.5 3.4z" fill="#1f8a5b"/><circle cx="16" cy="6.8" r="1.6" fill="#7a4e26"/></svg>
+    Mandarin
+  </div>
+
+  <div class="cap"><h1 id="cap"></h1></div>
+
+  <div class="win" id="win">
+    <div class="winbar"><span class="t">Mandarin — рабочий стол</span><span class="c">&#8211; &#9633; &#10005;</span></div>
+    <div class="body">
+      <div class="files" id="files">
+        <div class="file sel" data-file="pdf"><i style="background:#d93a40">PDF</i>договор.pdf</div>
+        <div class="file" data-file="heic"><i style="background:#4c8dff">HEIC</i>фото.heic</div>
+      </div>
+      <div class="stage">
+        <svg id="wheel" viewBox="0 0 280 280" role="img" aria-label="Меню форматов"></svg>
+        <div class="result" id="res"><span class="ok"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l4 4 10-11"/></svg></span><div><b id="res-t">договор.docx</b><small id="res-s">рядом с оригиналом</small></div></div>
+      </div>
+      <div class="cursor" id="pc"><svg viewBox="0 0 20 24" fill="none"><path d="M2 2l15 6-6 2-2 6z" fill="#fff" stroke="#111013" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
+      <div class="dragfile" id="pf"></div>
+    </div>
+  </div>
+
+  <div class="badges" id="badges">
+    <div class="badge"><b>✓</b> Офлайн</div>
+    <div class="badge"><b>✓</b> Файлы не уходят с ПК</div>
+    <div class="badge"><b>✓</b> PDF-редактор</div>
+  </div>
+
+  <div class="cta" id="cta">
+    <div class="price"><span>199 ₽</span></div>
+    <div class="sub">один раз — и навсегда</div>
+    <div class="url">mandarinappkon.github.io/mandarin</div>
+  </div>
+</div>
+
+<script>
+const SETS = {
+  pdf:  { items:[["DOCX"],["XLSX"],["PNG"],["TXT"],["PDF/A"],["JPG"],["PPTX"]], target:0, done:["договор.docx","рядом с оригиналом"] },
+  heic: { items:[["JPG"],["PNG"],["WEBP"],["PDF"],["BMP"],["TIFF"]], target:0, done:["фото.jpg","рядом с оригиналом"] },
+};
+const NS="http://www.w3.org/2000/svg", svg=document.getElementById("wheel");
+const cx=140,cy=140,R_OUT=125,R_IN=55,GAP=5.5,CORNER=10;
+let file="pdf", hover=-1;
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const pol=(r,a)=>[cx+r*Math.sin(a*Math.PI/180),cy-r*Math.cos(a*Math.PI/180)];
+function tilePath(a0,a1){const d=GAP/2+CORNER,ro=R_OUT-CORNER,ri=R_IN+CORNER;
+  const side=(r,base,s)=>base+s*Math.asin(Math.min(.999,d/r))*180/Math.PI;
+  let o0=side(ro,a0,1),o1=side(ro,a1,-1),i0=side(ri,a0,1),i1=side(ri,a1,-1);
+  if(i1<i0)i0=i1=(a0+a1)/2;const P=[],N=20;
+  for(let i=0;i<=N;i++)P.push(pol(ro,o0+(o1-o0)*i/N));
+  for(let i=0;i<=N;i++)P.push(pol(ri,i1+(i0-i1)*i/N));
+  return "M"+P.map(p=>p.map(v=>v.toFixed(2)).join(" ")).join("L")+"Z";}
+function draw(){
+  const items=SETS[file].items,n=items.length,step=360/n;svg.innerHTML="";
+  const el=(t,a,p=svg)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;};
+  el("circle",{cx,cy,r:132,fill:css("--rim")});el("circle",{cx,cy,r:129.5,fill:css("--disc")});
+  items.forEach((it,i)=>{const a0=i*step-step/2,a1=a0+step,sel=i===hover;
+    const g=el("g",{});const fill=sel?css("--citrus"):css("--tile");
+    el("path",{d:tilePath(a0,a1),fill:sel?css("--citrus"):css("--tile-edge"),stroke:sel?css("--citrus"):css("--tile-edge"),"stroke-width":CORNER*2+1.5,"stroke-linejoin":"round"},g);
+    el("path",{d:tilePath(a0,a1),fill,stroke:fill,"stroke-width":CORNER*2,"stroke-linejoin":"round"},g);
+    const [tx,ty]=pol((R_IN+R_OUT)/2+2,a0+step/2);
+    const t=el("text",{x:tx,y:ty,"text-anchor":"middle","dominant-baseline":"central",fill:sel?"#fff":css("--ink"),"font-family":"Onest, Segoe UI, sans-serif","font-weight":800,"font-size":n>7?14:17},g);
+    t.textContent=it[0];});
+  el("circle",{cx,cy,r:51,fill:css("--sunken")});el("circle",{cx,cy,r:45,fill:css("--surface")});
+  const label=hover>=0?items[hover][0]:"Shift";const w=Math.max(60,label.length*9+26);
+  el("rect",{x:cx-w/2,y:cy-15,width:w,height:30,rx:15,fill:css("--paper"),stroke:css("--line")});
+  const c=el("text",{x:cx,y:cy+1,"text-anchor":"middle","dominant-baseline":"central",fill:css("--muted"),"font-family":"Onest, Segoe UI, sans-serif","font-weight":700,"font-size":14});
+  c.textContent=label;
+}
+function setFile(f){file=f;hover=-1;document.querySelectorAll(".file").forEach(b=>b.classList.toggle("sel",b.dataset.file===f));draw();}
+function setHover(i){hover=i;draw();}
+draw();
+
+const cap=document.getElementById("cap"), win=document.getElementById("win");
+const pc=document.getElementById("pc"), pf=document.getElementById("pf"), res=document.getElementById("res");
+const badges=document.getElementById("badges"), cta=document.getElementById("cta");
+const t=ms=>new Promise(r=>setTimeout(r,ms));
+function say(html){cap.classList.remove("on");setTimeout(()=>{cap.innerHTML=html;cap.classList.add("on");},200);}
+function rel(el){const d=win.querySelector(".body").getBoundingClientRect(),b=el.getBoundingClientRect();return{x:b.left-d.left+b.width/2,y:b.top-d.top+b.height/2};}
+function move(x,y){pc.style.left=(x-4)+"px";pc.style.top=(y-2)+"px";}
+async function convert(f){
+  const card=document.querySelector(`.file[data-file="${f}"]`);
+  setFile(f);
+  const p=rel(card);move(p.x+10,p.y+10);pc.style.opacity=1;await t(600);
+  pf.innerHTML=card.innerHTML;pf.style.left=p.x+"px";pf.style.top=p.y+"px";pf.style.opacity=1;await t(350);
+  const tgt=SETS[f].target,n=SETS[f].items.length,step=360/n,ang=tgt*step*Math.PI/180;
+  const wb=rel(svg),R=svg.getBoundingClientRect().width/280*90;
+  const tx=wb.x+R*Math.sin(ang),ty=wb.y-R*Math.cos(ang);
+  move(tx+6,ty+4);pf.style.left=tx+"px";pf.style.top=ty+"px";setHover(tgt);await t(750);
+  pf.style.opacity=0;await t(450);
+  document.getElementById("res-t").textContent=SETS[f].done[0];
+  document.getElementById("res-s").textContent=SETS[f].done[1];
+  res.classList.add("on");
+}
+async function play(){
+  say("Конвертеры<br>крадут время."); await t(2300);
+  win.classList.add("on"); await t(700);
+  say("Перетащи файл…"); await convert("pdf"); await t(400);
+  say("…нажми <em>Shift</em>…"); await t(1500);
+  say("…готово.<br>Копия рядом."); await t(2200);
+  res.classList.remove("on"); pc.style.opacity=0;
+  say("Фото, видео,<br>PDF, Word, Excel."); await convert("heic"); await t(1900);
+  res.classList.remove("on"); pc.style.opacity=0;
+  say("Всё на твоём ПК.<br><em>Файлы никуда не уходят.</em>"); badges.classList.add("on"); await t(2600);
+  say("И полный <em>PDF-редактор</em>:<br>подпись, OCR, пароли."); await t(2400);
+  cap.classList.remove("on"); win.style.transition="opacity .5s,transform .5s"; win.classList.remove("on"); badges.classList.remove("on");
+  await t(500);
+  say("Mandarin для Windows"); cta.classList.add("on"); await t(4000);
+}
+window.addEventListener("load",()=>{ setTimeout(play, 400); });
+</script>
+</body>
+</html>
