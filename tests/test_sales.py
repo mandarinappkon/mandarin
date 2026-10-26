@@ -1,6 +1,6 @@
 """
-Сервер продаж с имитацией Робокассы: покупка → ResultURL-уведомление → ключ на почту и на экране.
-Проверка статуса идёт через поддельный OpStateExt-сервис. python tests/test_sales.py
+Сервер продаж с имитацией Робокассы: покупка → оплата → ключ на экране, восстановление по номеру
+заказа. Почта и персональные данные не собираются. python tests/test_sales.py
 """
 import base64, hashlib, json, os, sys, threading, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -45,13 +45,11 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 os.environ.update({
     "ROBOKASSA_OPSTATE": f"http://127.0.0.1:{srv.server_port}/",
     "ROBOKASSA_LOGIN": LOGIN, "ROBOKASSA_PASSWORD1": PW1, "ROBOKASSA_PASSWORD2": PW2, "ROBOKASSA_HASH": "sha256",
-    "PRICE_PRO": "990", "SITE_URL": "https://mandarin-app.ru", "MAIL_FROM": "sales@mandarin-app.ru",
-    "SMTP_HOST": "x", "SMTP_PASSWORD": "x",
+    "PRICE_PRO": "199", "SITE_URL": "https://mandarinappkon.github.io/mandarin",
+    "ALLOWED_ORIGINS": "https://mandarinappkon.github.io",
     "MANDARIN_PRIVATE_KEY": base64.b64encode(k.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())).decode(),
 })
 import sales
-SENT = []
-sales.send_key_email = lambda email, key, ed, oid: SENT.append((email, key, oid))
 ok = 0
 
 
@@ -61,7 +59,7 @@ def check(name, cond, extra=""):
     ok += 1; print("  ok ", name, extra)
 
 
-def call(method, q, body=None, origin="https://mandarin-app.ru"):
+def call(method, q, body=None, origin="https://mandarinappkon.github.io"):
     ev = {"httpMethod": method, "queryStringParameters": q, "headers": {"Origin": origin},
           "body": json.dumps(body) if body is not None else "", "isBase64Encoded": False}
     r = sales.handler(ev, None)
@@ -78,59 +76,62 @@ def cb(out, inv, sealed, pw):   # параметры callback'а Робокас�
             "SignatureValue": rk_sig(f"{out}:{inv}:{pw}:Shp_d={sealed}")}
 
 
-# ── покупка ──
-st, out, hd = call("POST", {"a": "buy"}, {"email": "Ivan@mail.ru", "agree": True})
+# ── покупка (без почты) ──
+st, out, hd = call("POST", {"a": "buy"}, {"agree": True})
 check("покупка даёт подписанную ссылку Робокассы", st == 200 and out["confirmation_url"].startswith("https://auth.robokassa.ru"))
-check("CORS для своего сайта", hd.get("Access-Control-Allow-Origin") == "https://mandarin-app.ru")
+check("CORS для своего сайта", hd.get("Access-Control-Allow-Origin") == "https://mandarinappkon.github.io")
 inv, sealed = out["payment_id"], out["token"]
-check("цена берётся с сервера (OutSum=990.00)", "OutSum=990.00" in out["confirmation_url"])
-check("почта не светится в URL — только шифртекст Shp_d", "Ivan%40mail.ru" not in out["confirmation_url"] and "Shp_d=" in out["confirmation_url"])
-check("без согласия с офертой — отказ", call("POST", {"a": "buy"}, {"email": "a@b.ru"})[0] == 400)
-check("кривая почта — отказ", call("POST", {"a": "buy"}, {"email": "nope", "agree": True})[0] == 400)
+check("цена берётся с сервера (OutSum=199.00)", "OutSum=199.00" in out["confirmation_url"])
+check("в заказе нет персональных данных (в Shp_d только редакция)", sales._open(sealed) == {"ed": "pro"})
+check("без согласия с офертой — отказ", call("POST", {"a": "buy"}, {})[0] == 400)
 
 # ── до оплаты ключа нет ──
 STATE[inv] = (5, 0.0)
-st, out, _ = call("GET", {"a": "order", **cb("990.00", inv, sealed, PW1)})
+st, out, _ = call("GET", {"a": "order", **cb("199.00", inv, sealed, PW1)})
 check("до оплаты — pending", st == 200 and out == {"status": "pending"})
 
 # ── ResultURL: подделка подписи и неоплаченный счёт ──
-bad = {"OutSum": "990.00", "InvId": inv, "Shp_d": sealed, "SignatureValue": "deadbeef"}
-check("уведомление с неверной подписью отклонено", call("POST", {"a": "webhook", **bad})[0] == 403 and not SENT)
-st, body, _ = call("POST", {"a": "webhook", **cb("990.00", inv, sealed, PW2)})
-check("подпись верна, но счёт не оплачен — ключа нет", st == 409 and not SENT)
+bad = {"OutSum": "199.00", "InvId": inv, "Shp_d": sealed, "SignatureValue": "deadbeef"}
+check("уведомление с неверной подписью отклонено", call("POST", {"a": "webhook", **bad})[0] == 403)
+st, body, _ = call("POST", {"a": "webhook", **cb("199.00", inv, sealed, PW2)})
+check("подпись верна, но счёт не оплачен — 409", st == 409)
 
 # ── оплата прошла ──
-STATE[inv] = (100, 990.0)
-st, body, _ = call("POST", {"a": "webhook", **cb("990.00", inv, sealed, PW2)})
-check("после оплаты ответ ровно OK<InvId>", st == 200 and body == f"OK{inv}")
-check("ключ ушёл на почту", len(SENT) == 1 and SENT[0][0] == "Ivan@mail.ru")
-lic = L.verify_key(SENT[0][1])
-check("ключ из письма действителен и привязан к почте", lic.email_tag == L.email_tag("ivan@mail.ru").hex())
-call("POST", {"a": "webhook", **cb("990.00", inv, sealed, PW2)})
-check("повторное уведомление даёт тот же ключ", SENT[1][1] == SENT[0][1])
+STATE[inv] = (100, 199.0)
+st, body, _ = call("POST", {"a": "webhook", **cb("199.00", inv, sealed, PW2)})
+check("после оплаты ResultURL отвечает ровно OK<InvId>", st == 200 and body == f"OK{inv}")
 
-# ── страница «спасибо» ──
-st, out, _ = call("GET", {"a": "order", **cb("990.00", inv, sealed, PW1)})
-check("страница «спасибо» показывает тот же ключ", st == 200 and out.get("key") == SENT[0][1], out.get("email", ""))
-tampered = cb("990.00", inv, sealed, PW1); tampered["SignatureValue"] = "00bad00"
+# ── страница «спасибо» показывает ключ ──
+st, out, _ = call("GET", {"a": "order", **cb("199.00", inv, sealed, PW1)})
+check("страница «спасибо» выдаёт ключ и номер заказа", st == 200 and out["key"].startswith("MNDR-") and out["order"] == inv)
+KEY = out["key"]
+check("ключ из страницы действителен", L.verify_key(KEY).edition == 1)
+check("в ответе нет почты/персональных данных", "email" not in out)
+tampered = cb("199.00", inv, sealed, PW1); tampered["SignatureValue"] = "00bad00"
 check("без верной подписи SuccessURL ключ не выдаётся", call("GET", {"a": "order", **tampered})[1] == {"status": "pending"})
+
+# ── восстановление по номеру заказа ──
+st, out, _ = call("GET", {"a": "recover", "id": inv})
+check("восстановление по номеру заказа даёт тот же ключ", st == 200 and out["key"] == KEY)
+check("восстановление: номер не цифрами — отказ", call("GET", {"a": "recover", "id": "abc"})[0] == 400)
+check("восстановление: неоплаченный номер — не найден", call("GET", {"a": "recover", "id": "123456789"})[0] == 404)
 
 # ── отменённый платёж ──
 STATE[inv] = (10, 0.0)
-check("отменённый платёж виден как canceled", call("GET", {"a": "order", **cb("990.00", inv, sealed, PW1)})[1] == {"status": "canceled"})
+check("отменённый платёж виден как canceled", call("GET", {"a": "order", **cb("199.00", inv, sealed, PW1)})[1] == {"status": "canceled"})
 
-# ── оплата меньшей суммы (подмена цены) — ключ не выдаётся ──
-st, out, _ = call("POST", {"a": "buy"}, {"email": "cheap@mail.ru", "agree": True})
+# ── оплата меньшей суммы (подмена цены) — ключ на экране не выдаётся ──
+st, out, _ = call("POST", {"a": "buy"}, {"agree": True})
 inv2, sealed2 = out["payment_id"], out["token"]
 STATE[inv2] = (100, 1.0)
-check("оплата меньшей суммы отклоняется", call("POST", {"a": "webhook", **cb("1.00", inv2, sealed2, PW2)})[0] == 400)
+check("оплата меньшей суммы — страница не выдаёт ключ", call("GET", {"a": "order", **cb("1.00", inv2, sealed2, PW1)})[1] == {"status": "pending"})
 
 # ── режим чеков «Робочеки» ──
 os.environ["RECEIPT"] = "robokassa"
-st, out, _ = call("POST", {"a": "buy"}, {"email": "ip@mail.ru", "agree": True})
+st, out, _ = call("POST", {"a": "buy"}, {"agree": True})
 check("режим чеков добавляет Receipt в ссылку оплаты", "Receipt=" in out["confirmation_url"])
 os.environ["RECEIPT"] = "none"
 
-check("health", call("GET", {"a": "health"})[1]["editions"] == {"pro": "990"})
+check("health", call("GET", {"a": "health"})[1]["editions"] == {"pro": "199"})
 print(f"\nСервер продаж: {ok} ok")
 srv.shutdown()

@@ -24,6 +24,10 @@ p{margin:0;color:var(--muted)}
 .btn-primary{background:var(--orange);color:var(--orange-ink)}
 .btn-ghost{background:var(--sunken);color:var(--ink)}
 ol{margin:0;padding-left:20px;color:var(--muted);display:grid;gap:6px}
+.field{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.field input{flex:1 1 220px;font:16px "Onest",sans-serif;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.field input:focus{outline:2px solid var(--orange);outline-offset:0;border-color:transparent}
+.sep{border:0;border-top:1px solid var(--line);margin:4px 0}
 .spin{width:22px;height:22px;border-radius:50%;border:3px solid var(--sunken);border-top-color:var(--orange);animation:r 1s linear infinite}
 @keyframes r{to{transform:rotate(1turn)}}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
@@ -35,14 +39,17 @@ a{color:inherit}
 </head>
 <body>
 <main>
-  <div class="card" id="card">
-    <div class="row" style="align-items:center"><div class="spin" id="spin"></div><p id="state">Проверяем оплату…</p></div>
+  <div class="card">
+    <div class="row" id="statusrow" style="align-items:center"><div class="spin" id="spin"></div><p id="state">Проверяем оплату…</p></div>
     <h1 id="title">Спасибо за покупку!</h1>
+
     <div id="key-box" hidden>
-      <p style="margin-bottom:8px">Ваш ключ Mandarin <span id="edition">Pro</span>. Копия уже ушла на <span id="email-mask">почту</span>.</p>
+      <p style="margin-bottom:8px">Ваш ключ Mandarin <span id="edition">Pro</span>. Скопируйте и сохраните его — почту мы не собираем, нигде больше он не хранится.</p>
       <div class="key" id="key"></div>
       <div class="row" style="margin-top:12px"><button class="btn btn-primary" id="copy" type="button">Скопировать ключ</button><span id="copied" class="ok" style="align-self:center" hidden>Скопировано</span></div>
+      <p id="order-note" style="font-size:14px;margin-top:10px"></p>
     </div>
+
     <div>
       <p style="color:var(--ink);font-weight:600;margin-bottom:6px">Как активировать</p>
       <ol>
@@ -51,53 +58,83 @@ a{color:inherit}
         <li>Вставьте ключ и нажмите «Активировать». Интернет не нужен.</li>
       </ol>
     </div>
-    <p style="font-size:14px">Письмо не пришло за 10 минут? Проверьте «Спам» или напишите на <span id="support">Mandarinapp1@yandex.ru</span> — пришлём ключ повторно.</p>
+
+    <hr class="sep">
+    <div>
+      <p style="color:var(--ink);font-weight:600;margin-bottom:6px">Потеряли ключ?</p>
+      <p style="font-size:14px">Введите номер заказа — ключ выдастся снова. Номер есть в чеке Робокассы и в выписке/смс банка после оплаты.</p>
+      <form class="field" id="rec-form">
+        <input id="rec-id" inputmode="numeric" placeholder="Номер заказа" autocomplete="off" aria-label="Номер заказа">
+        <button class="btn btn-ghost" type="submit">Восстановить</button>
+      </form>
+      <p id="rec-msg" style="font-size:14px;margin-top:8px"></p>
+    </div>
+
+    <p style="font-size:14px">Нужна помощь? Напишите на <span id="support">Mandarinapp1@yandex.ru</span>.</p>
     <div class="row"><a class="btn btn-ghost" href="index.html">На главную</a></div>
   </div>
 </main>
 <script>
-/* Те же настройки, что в index.html */
 const C = { API_URL: "https://functions.yandexcloud.net/d4e3ggudi9a6lqn7ct12", SUPPORT_EMAIL: "Mandarinapp1@yandex.ru", DOWNLOAD_URL: "https://github.com/mandarinappkon/mandarin/releases/latest/download/Mandarin.exe" };
 (() => {
-  document.getElementById("support").textContent = C.SUPPORT_EMAIL;
-  if (C.DOWNLOAD_URL) document.getElementById("dl").href = C.DOWNLOAD_URL;
   const $ = id => document.getElementById(id);
-  // Робокасса возвращает на эту страницу параметры оплаты (InvId, OutSum, SignatureValue, Shp_d) —
-  // просто пересылаем их серверу, он проверит подпись и статус платежа.
+  $("support").textContent = C.SUPPORT_EMAIL;
+  if (C.DOWNLOAD_URL) $("dl").href = C.DOWNLOAD_URL;
+  const done = (text, cls) => { $("spin").hidden = true; $("state").textContent = text; $("state").className = cls || ""; };
+  function showKey(d) {
+    $("title").textContent = "Готово — ваш ключ";
+    $("key").textContent = d.key;
+    $("edition").textContent = d.edition || "Pro";
+    if (d.order) $("order-note").textContent = "Номер заказа: " + d.order + " — сохраните его для восстановления.";
+    $("key-box").hidden = false;
+  }
+
   const rk = location.search.replace(/^\?/, "");
   const hasOrder = /(^|&)InvId=/i.test(rk);
-  const done = (text, cls) => { $("spin").hidden = true; $("state").textContent = text; $("state").className = cls || ""; };
-  if (!C.API_URL) { done("Предпросмотр страницы: после настройки здесь появится ключ."); return; }
-  if (!hasOrder) {
-    done("Если оплата прошла, ключ уже на вашей почте.");
-    return;
+  if (!C.API_URL) {
+    done("Предпросмотр страницы: после настройки здесь появится ключ.");
+  } else if (hasOrder) {
+    // Робокасса вернула параметры оплаты — проверяем статус и показываем ключ
+    let tries = 0;
+    (async function poll() {
+      tries++;
+      try {
+        const r = await fetch(`${C.API_URL}${C.API_URL.includes("?") ? "&" : "?"}a=order&${rk}`);
+        const d = await r.json();
+        if (d.status === "succeeded") { done("Оплата прошла", "ok"); showKey(d); return; }
+        if (d.status === "canceled") { done("Платёж отменён. Деньги не списаны — можно попробовать ещё раз.", "err"); $("title").textContent = "Оплата не прошла"; return; }
+        if (!r.ok && d.error) throw new Error(d.error);
+      } catch (e) { if (tries > 20) { done("Не удалось проверить оплату. Если деньги списались — восстановите ключ по номеру заказа ниже.", "err"); return; } }
+      if (tries < 40) setTimeout(poll, tries < 10 ? 2000 : 5000);
+      else done("Банк ещё подтверждает платёж. Вернитесь через пару минут или восстановите ключ по номеру заказа.");
+    })();
+  } else {
+    // зашли напрямую — режим восстановления
+    $("statusrow").hidden = true;
+    $("title").textContent = "Восстановление ключа";
   }
-  let tries = 0;
-  async function poll() {
-    tries++;
-    try {
-      const r = await fetch(`${C.API_URL}${C.API_URL.includes("?") ? "&" : "?"}a=order&${rk}`);
-      const d = await r.json();
-      if (d.status === "succeeded") {
-        done("Оплата прошла", "ok");
-        $("key").textContent = d.key; $("edition").textContent = d.edition || "Pro"; $("email-mask").textContent = d.email || "почту";
-        $("key-box").hidden = false;
-        try { sessionStorage.removeItem("mandarin_order"); } catch (_) {}
-        return;
-      }
-      if (d.status === "canceled") { done("Платёж отменён. Деньги не списаны — можно попробовать ещё раз.", "err"); $("title").textContent = "Оплата не прошла"; return; }
-      if (!r.ok && d.error) throw new Error(d.error);
-    } catch (e) { if (tries > 20) { done("Не удалось проверить оплату. Если деньги списались, ключ придёт на почту.", "err"); return; } }
-    if (tries < 40) setTimeout(poll, tries < 10 ? 2000 : 5000);
-    else done("Банк ещё подтверждает платёж. Ключ придёт на почту, как только оплата пройдёт.");
-  }
-  poll();
+
   $("copy").addEventListener("click", () => {
     const t = $("key").textContent;
     const ok = () => { $("copied").hidden = false; setTimeout(() => $("copied").hidden = true, 2000); };
     const select = () => getSelection().selectAllChildren($("key"));
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(ok, select);
     else select();
+  });
+
+  $("rec-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const id = $("rec-id").value.trim(), msg = $("rec-msg");
+    msg.className = ""; msg.textContent = "";
+    if (!/^\d+$/.test(id)) { msg.className = "err"; msg.textContent = "Введите номер заказа цифрами."; return; }
+    if (!C.API_URL) { msg.textContent = "Предпросмотр: восстановление заработает после настройки."; return; }
+    msg.textContent = "Проверяем…";
+    try {
+      const r = await fetch(`${C.API_URL}${C.API_URL.includes("?") ? "&" : "?"}a=recover&id=${encodeURIComponent(id)}`);
+      const d = await r.json();
+      if (d.status === "succeeded") { msg.textContent = ""; showKey(d); $("key-box").scrollIntoView({ behavior: "smooth", block: "center" }); }
+      else throw new Error(d.error || "Оплаченный заказ с таким номером не найден");
+    } catch (err) { msg.className = "err"; msg.textContent = err.message || "Не удалось восстановить. Проверьте номер заказа."; }
   });
 })();
 </script>

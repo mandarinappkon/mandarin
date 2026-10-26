@@ -334,8 +334,8 @@ window.MANDARIN = {
             <li>Обновления версии 1.x бесплатно</li>
           </ul>
           <form class="buy" id="buy-form" novalidate>
-            <div class="field"><label for="email">Почта — на неё придёт ключ</label><input id="email" name="email" type="email" autocomplete="email" placeholder="you@example.ru" required></div>
-            <label class="agree" for="agree"><input id="agree" name="agree" type="checkbox" required><span>Принимаю условия <a href="oferta.html">оферты</a> и даю согласие на обработку почты по <a href="privacy.html">политике конфиденциальности</a></span></label>
+            <p style="font-size:14px;color:var(--muted)">Без регистрации и почты. Ключ появится на экране сразу после оплаты — скопируйте и сохраните его.</p>
+            <label class="agree" for="agree"><input id="agree" name="agree" type="checkbox" required><span>Принимаю условия <a href="oferta.html">оферты</a></span></label>
             <button class="btn btn-primary" type="submit" id="pay-btn">Оплатить <span data-price>199</span> ₽</button>
             <div class="form-msg" id="form-msg" role="alert"></div>
             <div class="pay" aria-label="Способы оплаты"><span>Банковская карта</span><span>СБП</span><span>SberPay</span><span>T-Pay</span><span>ЮMoney</span></div>
@@ -349,11 +349,11 @@ window.MANDARIN = {
     <div class="wrap">
       <div class="sec-head"><p class="eyebrow">Вопросы</p><h2>Перед покупкой</h2></div>
       <div class="faq">
-        <details><summary>Как я получу ключ?</summary><p>Сразу после оплаты ключ появится на странице и придёт на почту. В программе: значок Mandarin в трее → «Лицензия…» → вставьте ключ → «Активировать». Интернет для активации не нужен.</p></details>
+        <details><summary>Как я получу ключ?</summary><p>Сразу после оплаты ключ появится прямо на странице — скопируйте и сохраните его. В программе: значок Mandarin в трее → «Лицензия…» → вставьте ключ → «Активировать». Интернет для активации не нужен. Почту и регистрацию мы не спрашиваем.</p></details>
         <details><summary>На скольких компьютерах можно пользоваться?</summary><p>Лицензия личная: ставьте на свои компьютеры — домашний и рабочий. Для сотрудников компании нужна отдельная лицензия на каждого.</p></details>
         <details><summary>Что будет после пробного периода?</summary><p>Колесо форматов, конвертация, PDF в Word, сжатие и порядок страниц остаются бесплатными навсегда. Заблокируются только функции PDF Pro, пока вы не введёте ключ.</p></details>
-        <details><summary>Можно вернуть деньги?</summary><p>Да, в течение 14 дней после покупки, если ключ не подошёл или программа не работает на вашем компьютере. Напишите на <span data-text="SUPPORT_EMAIL">Mandarinapp1@yandex.ru</span> с номером заказа из письма.</p></details>
-        <details><summary>Я потерял ключ</summary><p>Напишите на <span data-text="SUPPORT_EMAIL">Mandarinapp1@yandex.ru</span> с почты, указанной при покупке, — пришлём ключ повторно.</p></details>
+        <details><summary>Можно вернуть деньги?</summary><p>Да, в течение 14 дней после покупки, если ключ не подошёл или программа не работает на вашем компьютере. Напишите на <span data-text="SUPPORT_EMAIL">Mandarinapp1@yandex.ru</span> и укажите номер заказа.</p></details>
+        <details><summary>Я потерял ключ</summary><p>Ключ восстанавливается по номеру заказа на <a href="success.html">странице восстановления</a> — почта и регистрация не нужны. Номер заказа есть в чеке Робокассы и в выписке/смс банка после оплаты.</p></details>
         <details><summary>Какие нужны Windows и железо?</summary><p>Windows 10 или 11, 64-бит, до 500 МБ на диске. Для конвертации Word, Excel и PowerPoint в PDF нужен установленный Microsoft Office или бесплатный LibreOffice — PDF в Word работает без них.</p></details>
         <details><summary>Это безопасно? Не увидит ли кто мои файлы?</summary><p>Нет. Mandarin работает полностью на вашем компьютере: файлы никуда не загружаются, интернет для работы не нужен — можно отключить его и проверить. Программа не собирает статистику и не показывает рекламу.</p></details>
       </div>
@@ -538,16 +538,13 @@ window.MANDARIN = {
   form.addEventListener("submit", async e => {
     e.preventDefault();
     msg.className = "form-msg"; msg.textContent = "";
-    const email = form.email.value.trim();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) { msg.className = "form-msg err"; msg.textContent = "Проверьте адрес почты — на него придёт ключ."; form.email.focus(); return; }
     if (!form.agree.checked) { msg.className = "form-msg err"; msg.textContent = "Отметьте согласие с офертой, чтобы перейти к оплате."; return; }
     if (!C.API_URL) { msg.textContent = "Это предпросмотр сайта: оплата заработает, когда в настройках будет указан адрес сервера продаж."; return; }
     btn.disabled = true; const label = btn.innerHTML; btn.textContent = "Готовим оплату…";
     try {
-      const r = await fetch(C.API_URL + (C.API_URL.includes("?") ? "&" : "?") + "a=buy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, agree: true, edition: "pro" }) });
+      const r = await fetch(C.API_URL + (C.API_URL.includes("?") ? "&" : "?") + "a=buy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agree: true, edition: "pro" }) });
       const data = await r.json().catch(() => ({}));
       if (!r.ok || !data.confirmation_url) throw new Error(data.error || "Не удалось создать платёж. Попробуйте ещё раз через минуту.");
-      try { sessionStorage.setItem("mandarin_order", JSON.stringify({ id: data.payment_id, t: data.token, email })); } catch (_) {}
       location.href = data.confirmation_url;
     } catch (err) {
       msg.className = "form-msg err"; msg.textContent = err.message || "Нет связи с сервером. Проверьте интернет и попробуйте снова.";

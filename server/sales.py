@@ -121,7 +121,7 @@ def _open(token: str) -> dict:
         blob = base64.urlsafe_b64decode(token + "=" * (-len(token) % 4))
         raw = AESGCM(_order_key()).decrypt(blob[:12], blob[12:], None)
         data = json.loads(raw.decode())
-        if not EMAIL_RE.match(data.get("e", "")):
+        if not isinstance(data, dict) or "ed" not in data:
             raise ValueError
         return data
     except Exception:
@@ -149,13 +149,13 @@ def _receipt_enc(title: str, price) -> str:
 
 # ───────────────────────── создание платежа ─────────────────────────
 
-def create_payment(email: str, edition_key: str) -> dict:
+def create_payment(edition_key: str) -> dict:
     eds = editions()
     if edition_key not in eds:
         raise HttpError(400, "Неизвестная редакция")
     code, price, title = eds[edition_key]
     inv = secrets.randbelow(2_000_000_000) + 1          # уникальный номер счёта (InvId), int32
-    sealed = _seal({"e": email, "ed": edition_key})
+    sealed = _seal({"ed": edition_key})
     shp = {"Shp_d": sealed}
     out = f"{float(price):.2f}"
     login = env("ROBOKASSA_LOGIN", required=True)
@@ -235,75 +235,40 @@ def _verify_cb(params: dict, which: int) -> tuple[bool, str, dict]:
     return ok, inv, shp
 
 
-# ───────────────────────── ключ и письмо ─────────────────────────
+# ───────────────────────── ключ ─────────────────────────
+# Почту не собираем: ключ покупатель видит на странице после оплаты и восстанавливает по номеру
+# заказа. Поэтому оператором персональных данных продавец не становится.
 
-def key_for(inv: str, email: str, edition: int) -> str:
+def key_for(inv: str, edition: int) -> str:
     priv = base64.b64decode(env("MANDARIN_PRIVATE_KEY", required=True))
     lid = hashlib.sha256(("robokassa:" + str(inv)).encode()).digest()[:12]
-    return L.make_key(priv, lid, email, edition)
+    return L.make_key(priv, lid, "", edition)           # без привязки к почте
 
 
-def send_key_email(email: str, key: str, edition: int, order_id: str):
-    name = L.EDITIONS.get(edition, "Pro")
-    download = env("DOWNLOAD_URL", env("SITE_URL", "") + "/#download")
-    support = env("SUPPORT_EMAIL", L.SUPPORT_EMAIL)
-    msg = EmailMessage()
-    msg["Subject"] = f"Ваш ключ Mandarin {name}"
-    msg["From"] = formataddr((env("MAIL_FROM_NAME", "Mandarin"), env("MAIL_FROM", required=True)))
-    msg["To"] = email
-    msg["Reply-To"] = support
-    text = (f"Спасибо за покупку Mandarin {name}!\n\nВаш ключ:\n\n{key}\n\n"
-            "Как активировать: щёлкните значок Mandarin в трее → «Лицензия…» (или в окне программы "
-            "«Купить Pro») → вставьте ключ → «Активировать».\n\n"
-            f"Скачать программу: {download}\nНомер заказа: {order_id}\n"
-            f"Вопросы: {support} — просто ответьте на это письмо.\n")
-    msg.set_content(text)
-    k = html.escape(key)
-    msg.add_alternative(f"""<!doctype html><html><body style="font-family:Segoe UI,Arial,sans-serif;color:#141418;
-background:#f4f4f5;padding:24px"><div style="max-width:560px;margin:auto;background:#fff;border-radius:16px;padding:28px">
-<div style="font-size:22px;font-weight:700">🍊 Спасибо за покупку Mandarin {html.escape(name)}!</div>
-<p style="color:#6f6f7a">Ваш ключ (скопируйте его целиком):</p>
-<div style="font-family:Consolas,monospace;font-size:13px;background:#fff1e8;border:1px solid #ffd2b8;border-radius:10px;
-padding:14px;word-break:break-all">{k}</div>
-<p><b>Как активировать:</b> значок Mandarin в трее → «Лицензия…» → вставьте ключ → «Активировать».</p>
-<p><a href="{html.escape(download)}" style="background:#ff5a0a;color:#fff;padding:10px 18px;border-radius:10px;
-text-decoration:none;font-weight:600">Скачать Mandarin</a></p>
-<p style="color:#6f6f7a;font-size:13px">Номер заказа: {html.escape(order_id)}<br>Вопросы — просто ответьте на это письмо
-или напишите на {html.escape(support)}.</p></div></body></html>""", subtype="html")
-    host, port = env("SMTP_HOST", required=True), int(env("SMTP_PORT", "465"))
-    user, pw = env("SMTP_USER", env("MAIL_FROM")), env("SMTP_PASSWORD", required=True)
-    ctx = ssl.create_default_context()
-    if port == 465:
-        with smtplib.SMTP_SSL(host, port, context=ctx, timeout=20) as s:
-            s.login(user, pw)
-            s.send_message(msg)
-    else:
-        with smtplib.SMTP(host, port, timeout=20) as s:
-            s.starttls(context=ctx)
-            s.login(user, pw)
-            s.send_message(msg)
+def _edition_by_sum(paid: float) -> int:
+    """Код редакции по оплаченной сумме (на случай второй редакции); по умолчанию — Pro."""
+    for key, (code, price, title) in editions().items():
+        if abs(float(price) - paid) < 0.5:
+            return code
+    return 1
 
 
 # ───────────────────────── маршруты ─────────────────────────
 
 def route_buy(body: dict) -> dict:
-    email = str(body.get("email", "")).strip()
-    if not EMAIL_RE.match(email) or len(email) > 120:
-        raise HttpError(400, "Проверьте адрес почты")
     if not body.get("agree"):
         raise HttpError(400, "Нужно согласие с условиями оферты")
-    return create_payment(email, str(body.get("edition", "pro")))
+    return create_payment(str(body.get("edition", "pro")))
 
 
 def route_webhook(params: dict) -> str:
-    """ResultURL Робокассы. Возвращает строку «OK<InvId>» — тело ответа для Робокассы."""
+    """ResultURL Робокассы. Сверяем подпись и факт оплаты, отвечаем «OK<InvId>». Ключ покупатель
+    получает на сайте, письмо не отправляется (почту не собираем)."""
     ok, inv, shp = _verify_cb(params, 2)
     if not ok:
         raise HttpError(403, "Подпись уведомления не совпадает")
     data = _open(shp.get("Shp_d", ""))
-    edition_code, _ = confirm(inv, data["ed"])
-    key = key_for(inv, data["e"], edition_code)
-    send_key_email(data["e"], key, edition_code, inv)   # ошибка → 500 → Робокасса повторит (ключ тот же)
+    confirm(inv, data["ed"])                            # проверяем, что оплачено на нужную сумму
     return f"OK{inv}"
 
 
@@ -320,10 +285,22 @@ def route_order(q: dict) -> dict:
     ed = editions().get(data["ed"])
     if not ed or paid + 0.001 < float(ed[1]):
         return {"status": "pending"}
-    email = data["e"]
-    user, _, domain = email.partition("@")
-    return {"status": "succeeded", "key": key_for(inv, email, ed[0]),
-            "edition": L.EDITIONS.get(ed[0], "Pro"), "email": user[:2] + "•••@" + domain}
+    return {"status": "succeeded", "key": key_for(inv, ed[0]),
+            "edition": L.EDITIONS.get(ed[0], "Pro"), "order": str(inv)}
+
+
+def route_recover(q: dict) -> dict:
+    """Восстановление ключа по номеру заказа (InvId). Персональных данных не требует: спрашиваем у
+    Робокассы, что счёт с этим номером оплачен, и отдаём тот же ключ."""
+    inv = (q.get("id") or "").strip()
+    if not inv.isdigit():
+        raise HttpError(400, "Укажите номер заказа цифрами")
+    state, paid = op_state(inv)
+    if state != 100:
+        raise HttpError(404, "Оплаченный заказ с таким номером не найден")
+    code = _edition_by_sum(paid)
+    return {"status": "succeeded", "key": key_for(inv, code),
+            "edition": L.EDITIONS.get(code, "Pro"), "order": str(inv)}
 
 
 def dispatch(method: str, query: dict, body_text: str, content_type: str, origin: str | None):
@@ -362,6 +339,8 @@ def dispatch(method: str, query: dict, body_text: str, content_type: str, origin
             out = route_buy(body)
         elif action == "order" and method == "GET":
             out = route_order(query)
+        elif action == "recover" and method == "GET":
+            out = route_recover(query)
         elif action == "health":
             out = {"ok": True, "editions": {k: v[1] for k, v in editions().items()}}
         else:

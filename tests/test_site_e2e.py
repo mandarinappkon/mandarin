@@ -77,15 +77,14 @@ site = start(partial(SimpleHTTPRequestHandler, directory=str(site_dir)))
 SITE = f"http://127.0.0.1:{site.server_port}"; API_URL = f"http://127.0.0.1:{api.server_port}/"
 CFG["site"] = SITE
 for f in ("index.html", "success.html"):                  # подставляем адрес сервера, как сделает продавец
-    p = site_dir / f; s = p.read_text("utf-8"); p.write_text(re.sub(r'API_URL: ""', f'API_URL: "{API_URL}"', s, count=1), "utf-8")
+    p = site_dir / f; s = p.read_text("utf-8"); p.write_text(re.sub(r'API_URL: "[^"]*"', f'API_URL: "{API_URL}"', s, count=1), "utf-8")
 os.environ.update({
     "ROBOKASSA_URL": f"http://127.0.0.1:{rk.server_port}/Merchant/Index.aspx",
     "ROBOKASSA_OPSTATE": f"http://127.0.0.1:{rk.server_port}/Merchant/WebService/Service.asmx/OpStateExt",
     "ROBOKASSA_LOGIN": LOGIN, "ROBOKASSA_PASSWORD1": PW1, "ROBOKASSA_PASSWORD2": PW2, "ROBOKASSA_HASH": "sha256",
-    "PRICE_PRO": "990", "SITE_URL": SITE, "ALLOWED_ORIGINS": SITE, "MAIL_FROM": "s@m.ru", "SMTP_HOST": "x", "SMTP_PASSWORD": "x",
+    "PRICE_PRO": "199", "SITE_URL": SITE, "ALLOWED_ORIGINS": SITE,
     "MANDARIN_PRIVATE_KEY": base64.b64encode(k.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())).decode()})
 import sales
-MAIL = []; sales.send_key_email = lambda e, key, ed, oid: MAIL.append((e, key))
 
 from playwright.sync_api import sync_playwright
 ok = 0
@@ -110,19 +109,22 @@ with sync_playwright() as p:
     for i in range(1, 16): pg.mouse.move(src["x"] + 20 + (tb["x"] + tb["width"] / 2 - src["x"] - 20) * i / 15, src["y"] + 15 + (tb["y"] + tb["height"] / 2 - src["y"] - 15) * i / 15)
     pg.mouse.up(); pg.wait_for_timeout(1300)
     check("демо: перетаскивание PDF на XLSX", "XLSX" in pg.inner_text("#t-title"), pg.inner_text("#t-sub"))
-    # покупка
-    pg.click("#pay-btn"); check("без почты — подсказка", "почты" in pg.inner_text("#form-msg"))
-    pg.fill("#email", "Anna.Petrova@mail.ru"); pg.click("#pay-btn")
-    check("без согласия с офертой — подсказка", "оферт" in pg.inner_text("#form-msg"))
+    # покупка без почты
+    pg.click("#pay-btn"); check("без согласия с офертой — подсказка", "оферт" in pg.inner_text("#form-msg"))
+    check("поля почты на сайте нет", pg.locator("#email").count() == 0)
     pg.check("#agree")
     with pg.expect_navigation(url=re.compile(r"success\.html")): pg.click("#pay-btn")
     pg.wait_for_selector("#key-box:not([hidden])", timeout=15000)
     key = pg.inner_text("#key").strip()
     if SHOTS: pg.screenshot(path=str(SHOTS / "site_success.png"), full_page=True)
     check("после оплаты ключ на экране", key.startswith("MNDR-"), pg.inner_text("#state"))
-    check("тот же ключ ушёл на почту", MAIL and MAIL[-1] == ("Anna.Petrova@mail.ru", key))
-    check("ключ активируется в программе", L.verify_key(key).email_tag == L.email_tag("anna.petrova@mail.ru").hex())
-    check("почта не светится в адресе оплаты", "Anna.Petrova" not in json.dumps(list(STATE.keys())))
+    check("ключ активируется в программе", L.verify_key(key).edition == 1)
+    # восстановление по номеру заказа (без каких-либо персональных данных)
+    order = [s for s in STATE if STATE[s][0] == 100][-1]
+    pg.goto(SITE + "/success.html"); pg.wait_for_timeout(400)
+    pg.fill("#rec-id", order); pg.click("#rec-form button[type=submit]")
+    pg.wait_for_selector("#key-box:not([hidden])", timeout=10000)
+    check("восстановление по номеру заказа даёт тот же ключ", pg.inner_text("#key").strip() == key)
     # телефон
     m = b.new_page(viewport={"width": 390, "height": 844}, device_scale_factor=2)
     m.goto(SITE + "/index.html"); m.wait_for_timeout(500)
