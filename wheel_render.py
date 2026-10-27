@@ -12,7 +12,7 @@ import math
 import os
 from functools import lru_cache
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 SS = 3                                  # суперсэмплинг для сглаживания
 
@@ -378,6 +378,108 @@ def render_wheel(labels: list[str], hover: int, center_text: str, caption: str =
         _text_center(d, (cx, cy), center_text, f, INK_SOFT)
 
     # подпись под колесом («Конвертировать в PNG»)
+    if caption:
+        f = _fit_font(d, caption, W - 16 * S, int(11 * g.k * S), bold=False)
+        tw = d.textlength(caption, font=f)
+        ph = 24 * S * g.k
+        y = (g.W + g.CAPTION_H / 2) * S
+        d.rounded_rectangle((W / 2 - tw / 2 - 12 * S * g.k, y - ph / 2, W / 2 + tw / 2 + 12 * S * g.k, y + ph / 2),
+                            radius=ph / 2, fill=PILL)
+        _text_center(d, (W / 2, y), caption, f, CAPTION_INK)
+
+    return im.resize((g.W, g.H), Image.LANCZOS)
+
+
+# ───────────────────────── мандарин (дольки с градиентом) ─────────────────────────
+
+FLESH = ((255, 221, 165), (255, 152, 54), (243, 125, 24))     # сердцевина · середина · край
+FLESH_HI = ((255, 142, 60), (255, 95, 14), (228, 76, 4))      # выбранная долька
+MEMBRANE = (255, 244, 230)                                    # плёнка между дольками
+PEEL_RING = (255, 184, 110)
+PITH = (255, 247, 239)
+LABEL_INK = (120, 60, 12)
+CORE_INK = (176, 122, 66)
+VEIN = (255, 255, 255)
+
+
+@lru_cache(maxsize=8)
+def _flesh_imgs(W, H, cx, cy, R):
+    """Два RGB-полотна с радиальным мандариновым градиентом: обычное и для выбранной дольки."""
+    base = Image.new("L", (W, H), 255)
+    grad = Image.radial_gradient("L").resize((2 * R, 2 * R))   # 0 в центре → 255 к краю
+    base.paste(grad, (cx - R, cy - R))
+
+    def col(stops):
+        return ImageOps.colorize(base, stops[0], stops[2], stops[1]).convert("RGB")
+    return col(FLESH), col(FLESH_HI)
+
+
+def render_mandarin(labels: list[str], hover: int, center_text: str, caption: str = "",
+                    icons: list[str | None] | None = None, scale: float = 1.0) -> Image.Image:
+    """Колесо-мандарин: дольки с сочным градиентом вместо плиток. Та же геометрия, что у render_wheel."""
+    g = Geometry(scale)
+    S = SS
+    W, H = g.W * S, g.H * S
+    im = Image.new("RGB", (W, H), KEY)
+    d = ImageDraw.Draw(im)
+    cx, cy = g.CX * S, g.CY * S
+    R = g.R_DISC * S
+    flesh, hi = _flesh_imgs(W, H, int(round(cx)), int(round(cy)), int(round(R)))
+
+    # тонкий ободок-кожура
+    rw = max(1, int(round(3 * g.k * S)))
+    d.ellipse((cx - R + rw, cy - R + rw, cx + R - rw, cy + R - rw), outline=PEEL_RING, width=rw)
+
+    n = len(labels)
+    if n:
+        step = 360 / n
+        for i, label in enumerate(labels):
+            a0 = i * step - step / 2
+            a1 = a0 + step
+            sel = i == hover
+            # плёнка-мембрана (шире дольки)
+            m = Image.new("L", (W, H), 0)
+            _tile_shape(ImageDraw.Draw(m), cx, cy, g.R_IN * S - 2 * S, g.R_OUT * S + 2 * S, a0, a1,
+                        g.GAP * S - 3 * S, g.CORNER * S + 2 * S, 255)
+            im.paste(MEMBRANE, (0, 0), m)
+            # мякоть дольки через маску
+            fm = Image.new("L", (W, H), 0)
+            _tile_shape(ImageDraw.Draw(fm), cx, cy, g.R_IN * S, g.R_OUT * S, a0, a1, g.GAP * S, g.CORNER * S, 255)
+            im.paste(hi if sel else flesh, (0, 0), fm)
+            mid = a0 + step / 2
+            # короткая прожилка у сердцевины (не доходит до подписи)
+            if not sel:
+                x1, y1 = _polar(cx, cy, g.R_IN * S + (g.R_OUT - g.R_IN) * S * 0.06, mid)
+                x2, y2 = _polar(cx, cy, g.R_IN * S + (g.R_OUT - g.R_IN) * S * 0.22, mid)
+                d.line((x1, y1, x2, y2), fill=VEIN, width=max(1, int(round(1.3 * g.k * S))))
+            # подпись
+            rr = (g.R_IN + g.R_OUT) / 2 * S + 2 * S * g.k
+            tx, ty = _polar(cx, cy, rr, mid)
+            chord = 2 * rr * math.sin(math.radians(step / 2)) - 2 * g.GAP * S - 6 * S * g.k
+            max_w = min(chord, (g.R_OUT - g.R_IN) * S * 1.05)
+            ink = WHITE if sel else LABEL_INK
+            icon = icons[i] if icons else None
+            if icon:
+                txt = label.upper()
+                f = _fit_font(d, txt, max_w, int(10 * g.k * S))
+                draw_icon(d, icon, tx, ty - 7 * g.k * S, 7.5 * g.k * S, ink, 1.6 * g.k * S)
+                _text_center(d, (tx, ty + 10 * g.k * S), txt, f, ink)
+            else:
+                f = _fit_font(d, label, max_w, int((15 if n <= 8 else 13) * g.k * S))
+                _text_center(d, (tx, ty), label, f, ink)
+
+    # сердцевина
+    rh = g.R_HOLE * S
+    m = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(m).ellipse((cx - rh, cy - rh, cx + rh, cy + rh), fill=255)
+    im.paste(MEMBRANE, (0, 0), m)
+    rp = rh - 4 * S * g.k
+    d.ellipse((cx - rp, cy - rp, cx + rp, cy + rp), fill=PITH)
+    if center_text:
+        f = _fit_font(d, center_text, 2 * rp - 18 * S * g.k, int(12 * g.k * S), bold=False)
+        _text_center(d, (cx, cy), center_text, f, CORE_INK)
+
+    # подпись под колесом
     if caption:
         f = _fit_font(d, caption, W - 16 * S, int(11 * g.k * S), bold=False)
         tw = d.textlength(caption, font=f)

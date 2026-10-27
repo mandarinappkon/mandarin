@@ -485,8 +485,8 @@ class MandarinApp:
         key = (labels, icons, self.hover, self._center_text(), self._caption())
         photo = self._wheel_cache.get(key)
         if photo is None:
-            im = wheel_render.render_wheel(list(labels), self.hover, key[3], key[4],
-                                           icons=list(icons) if icons else None, scale=self.k)
+            im = wheel_render.render_mandarin(list(labels), self.hover, key[3], key[4],
+                                              icons=list(icons) if icons else None, scale=self.k)
             photo = ImageTk.PhotoImage(im)
             if len(self._wheel_cache) > 60:
                 self._wheel_cache.clear()

@@ -96,22 +96,13 @@ jobs:
         run: |
           powershell -NoProfile -Command "Compress-Archive -Path dist/Mandarin.exe,dist/Mandarin.exe.sig,uninstall.bat,uninstall.ps1 -DestinationPath Mandarin-portable.zip -Force"
 
-      - name: Upload build
+      # Тестовая ветка: только приватный артефакт, БЕЗ публичного релиза.
+      # Скачать: вкладка Actions → этот запуск → раздел Artifacts → «Mandarin».
+      - name: Upload build (artifact only)
         uses: actions/upload-artifact@v4
         with:
           name: Mandarin
           path: |
             dist/Mandarin.exe
             dist/Mandarin.exe.sig
-
-      - name: Publish release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="build-$(date -u +%Y%m%d-%H%M)"
-          gh release create "$tag" \
-            dist/Mandarin.exe dist/Mandarin.exe.sig Mandarin-portable.zip \
-            --title "Mandarin Pro ($tag)" \
-            --notes "Платная защищённая сборка. 14 дней бесплатно, затем PDF-Pro требует ключ. **Важно:** держите Mandarin.exe и Mandarin.exe.sig в одной папке — подпись защищает программу от взлома. Mandarin-portable.zip — то же в архиве с деинсталлятором." \
-            --latest
+            Mandarin-portable.zip
