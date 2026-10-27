@@ -135,7 +135,7 @@ def _receipt_json(title: str, price) -> str:
     в UTF-8 БЕЗ URL-кодирования: именно от него считается подпись. В ссылку кладётся URL-кодированная
     версия — рассинхрон этих двух мест и давал ошибку 29 «Неверная Signature»."""
     receipt = {"items": [{
-        "name": f"{title}: неисключительная лицензия"[:128],
+        "name": f"{title}, лицензия"[:128],
         "quantity": 1,
         "sum": float(price),
         "payment_method": "full_payment",
