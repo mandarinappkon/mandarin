@@ -130,9 +130,10 @@ def _open(token: str) -> dict:
 
 # ───────────────────────── чек (необязательно) ─────────────────────────
 
-def _receipt_enc(title: str, price) -> str:
-    """URL-кодированный Receipt для фискализации «Робочеки» (ИП/ООО). Для самозанятого обычно не нужен —
-    Робокасса сама регистрирует доход в «Мой налог» по подключённому счёту самозанятого."""
+def _receipt_json(title: str, price) -> str:
+    """Состав чека (номенклатура) для фискализации самозанятого «Робочеки СМЗ». Возвращает JSON
+    в UTF-8 БЕЗ URL-кодирования: именно от него считается подпись. В ссылку кладётся URL-кодированная
+    версия — рассинхрон этих двух мест и давал ошибку 29 «Неверная Signature»."""
     receipt = {"items": [{
         "name": f"{title}: неисключительная лицензия"[:128],
         "quantity": 1,
@@ -144,7 +145,7 @@ def _receipt_enc(title: str, price) -> str:
     sno = env("RECEIPT_SNO")
     if sno:
         receipt["sno"] = sno
-    return urllib.parse.quote(json.dumps(receipt, ensure_ascii=True, separators=(",", ":")), safe="")
+    return json.dumps(receipt, ensure_ascii=False, separators=(",", ":"))
 
 
 # ───────────────────────── создание платежа ─────────────────────────
@@ -161,9 +162,9 @@ def create_payment(edition_key: str) -> dict:
     login = env("ROBOKASSA_LOGIN", required=True)
 
     parts = [login, out, str(inv)]
-    receipt_enc = _receipt_enc(title, price) if env("RECEIPT", "none") == "robokassa" else None
-    if receipt_enc:
-        parts.append(receipt_enc)                        # Receipt входит в подпись в URL-кодированном виде
+    receipt_raw = _receipt_json(title, price) if env("RECEIPT", "none") == "robokassa" else None
+    if receipt_raw:
+        parts.append(receipt_raw)                        # подпись считается от НЕкодированного JSON
     parts.append(_pw(1))
     signature = _hash(":".join(parts) + _shp_tail(shp))
 
@@ -176,8 +177,8 @@ def create_payment(edition_key: str) -> dict:
     if env("ROBOKASSA_TEST", "0") == "1":
         params["IsTest"] = "1"
     query = urllib.parse.urlencode(params)
-    if receipt_enc:
-        query += "&Receipt=" + receipt_enc               # уже URL-кодирован — повторно не кодируем
+    if receipt_raw:
+        query += "&Receipt=" + urllib.parse.quote(receipt_raw, safe="")   # в ссылку — URL-кодированный
     return {"confirmation_url": f"{PAY_URL}?{query}", "payment_id": str(inv), "token": sealed}
 
 
